@@ -36,7 +36,7 @@ class PortableExternalPackageTests(unittest.TestCase):
         first = self.root / "skills/alpha/Docs/Guide.md"
         second = self.root / "skills/alpha/docs/guide.md"
         first.parent.mkdir()
-        second.parent.mkdir()
+        second.parent.mkdir(exist_ok=True)
         first.write_text("A", encoding="utf-8")
         second.write_text("B", encoding="utf-8")
         if first.samefile(second):
@@ -47,7 +47,7 @@ class PortableExternalPackageTests(unittest.TestCase):
 
     def test_colliding_manifest_skill_roots_rejected(self):
         other = self.root / "skills/ALPHA"
-        other.mkdir()
+        other.mkdir(exist_ok=True)
         (other / "SKILL.md").write_text(
             "---\nname: beta\ndescription: Carefully validate a project before release.\n---\n",
             encoding="utf-8"
