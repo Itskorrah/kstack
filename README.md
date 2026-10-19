@@ -1,6 +1,6 @@
 <div align="center">
 
-# KStack
+# kstack
 
 **A better default for coding agents. A developer stack that improves on evidence.**
 
