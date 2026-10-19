@@ -301,7 +301,7 @@
 
 **Classification:** P0 changes partially implemented; verification environment-blocked, not Codex-only. Exact blocker: the Chat-mode container cannot resolve GitHub to obtain a complete checkout; hosted Actions are exhausted. GitHub commits and file readback were available; no Python test suite has run on the new branch.
 
-**Already written:** transaction creation rejects case-insensitive/Unicode-normalised filename collisions; recovery preflights every journal entry, old/new hash, needed backup and snapshot before modifying any file; external inspection rejects portable collisions across package skill directories and tracked files. Ten new tests cover these invariants. See IMPLEMENTATION_STATUS.md.
+**Already written:** transaction creation rejects case-insensitive/Unicode-normalised filename collisions; recovery preflights every journal entry, old/new hash, needed backup and snapshot before modifying any file; external inspection rejects portable collisions across package skill directories and tracked files. Eleven new tests cover these invariants. See IMPLEMENTATION_STATUS.md.
 
 **Branch:** fix/host-recovery-preflight-20261020, based on main b6924a1d29d07bd15325dbf666984ccb1e7c0450.
 **Files:** src/kstack/transaction.py; src/kstack/external.py; tests/test_host_path_identity.py; tests/test_external_portable_paths.py.
