@@ -242,6 +242,7 @@ def recover_host_files(root: Path) -> dict:
     # Otherwise a late conflicting user edit or missing backup can leave a
     # partially recovered installation after the function raises an error.
     preflight_names = set()
+    validated = []
     for entry in entries:
         if not isinstance(entry, dict) or set(entry) != {"path", "old_sha256", "old_mode", "new_sha256"}:
             raise ValueError("Invalid host transaction entry")
@@ -264,30 +265,18 @@ def recover_host_files(root: Path) -> dict:
             backup = _safe_host_path(stage, "backup/" + relative)
             if _sha_file(backup) != entry["old_sha256"]:
                 raise ValueError(f"Host transaction backup is missing or corrupt: {relative}")
+        validated.append((entry, current))
     if generation is not None:
         snapshot = _safe_host_path(root, ".kstack-generations/" + generation)
         if is_link_or_junction(snapshot):
             raise ValueError("Refusing symlink interrupted host generation")
 
-    seen = set()
-    for entry in entries:
-        if not isinstance(entry, dict) or set(entry) != {"path", "old_sha256", "old_mode", "new_sha256"}:
-            raise ValueError("Invalid host transaction entry")
+    for entry, inspected_sha in validated:
         relative = entry["path"]
-        if (not isinstance(relative, str)
-                or any(value is not None and (not isinstance(value, str) or not re.fullmatch(r"[a-f0-9]{64}", value))
-                       for value in (entry["old_sha256"], entry["new_sha256"]))
-                or (entry["old_mode"] is not None and
-                    (type(entry["old_mode"]) is not int or not 0 <= entry["old_mode"] <= 0o7777))):
-            raise ValueError("Invalid host transaction hash or mode")
-        portable_name = _host_path_key(relative)
-        if portable_name in seen:
-            raise ValueError("Duplicate host transaction path")
-        seen.add(portable_name)
         target = _safe_host_path(root, relative)
         current = _sha_file(target)
-        if current not in (entry["old_sha256"], entry["new_sha256"]):
-            raise ValueError(f"Host file changed after interruption; manual recovery required: {relative}")
+        if current != inspected_sha:
+            raise ValueError(f"Host file changed during recovery; manual recovery required: {relative}")
         old_hash = entry["old_sha256"]
         if old_hash is None:
             if current is not None:
