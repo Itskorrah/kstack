@@ -1,0 +1,5 @@
+[project]
+name = "kstack-python-acceptance-fixture"
+version = "0.0.1"
+requires-python = ">=3.10"
+description = "Disposable local test fixture, not a published library"
