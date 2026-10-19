@@ -97,6 +97,16 @@ class HostRecoveryPreflightTests(unittest.TestCase):
         self.assertEqual((self.root / "A.txt").read_bytes(), b"new-a")
         self.assertEqual((self.root / "a.txt").read_bytes(), b"new-b")
 
+    def test_recovery_rejects_symlink_host_root(self):
+        link = self.root.parent / (self.root.name + "-alias")
+        try:
+            link.symlink_to(self.root, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("Directory symlinks unavailable on this filesystem")
+        self.addCleanup(link.unlink)
+        with self.assertRaisesRegex(ValueError, "Host skill directory cannot be a symlink"):
+            recover_host_files(link)
+
     def test_complete_generation_recovers_all_files(self):
         self.interrupted([
             ("a.txt", b"old-a", b"new-a", b"new-a"),
