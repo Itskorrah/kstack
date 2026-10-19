@@ -105,5 +105,23 @@ class EngineTest(unittest.TestCase):
         api.head(REPO, "main")
         self.assertTrue(data["url"].startswith("https://api.github.com/repos/"))
         self.assertNotIn("test-secret", data["url"])
+    def test_same_source_revision_can_replace_itself(self):
+        item = self.prepare()
+        promote(self.state, self.policy, ID, self.review(item), autonomous=True)
+        # Simulate a changed upstream revision of exactly this pinned skill.
+        next_commit = "b" * 40
+        self.api.head = lambda repo, branch: next_commit
+        changed = discover(self.api, self.watch, self.state)
+        self.assertEqual(changed["changed"], [ID])
+        # The CLI excludes the same active ID from its duplicate-name check.
+        names = set(available_skills(ROOT, self.state))
+        names.discard(read_json(self.state / "active.json")[ID]["name"])
+        updated = assess(self.api, self.policy, self.state, ID, names)
+        self.assertFalse(updated["blockers"])
+        self.assertEqual(updated["commit"], next_commit)
+        promote(self.state, self.policy, ID, self.review(updated), autonomous=True)
+        self.assertEqual(read_json(self.state / "active.json")[ID]["commit"], next_commit)
+        rollback(self.state, 2)
+        self.assertEqual(read_json(self.state / "active.json")[ID]["commit"], SHA)
     def test_bad_repo_name(self):
         with self.assertRaises(ValueError): GitHubAPI(transport=lambda req: {}).repository("https://evil.invalid/")

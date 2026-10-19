@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "high_autonomy": true,
+  "auto_promote_min_review": 92,
+  "trusted_owners": ["Itskorrah", "vercel-labs", "anthropics", "obra", "ibelick"],
+  "max_package_files": 12,
+  "interests": ["coding", "developer", "code", "testing", "review", "security", "architecture", "performance", "react", "python", "design", "accessibility", "documentation", "skills", "debugging"],
+  "policy_notes": [
+    "High autonomy is opt-in at promotion command; does not mean unattended remote execution.",
+    "New skills require pinned provenance, single-file Markdown, zero screening flags, sandbox rehearsal and independent evidence review.",
+    "An allowlisted publisher is not a safety certification. Never execute code fetched from discovery.",
+    "Scripts, hooks, network tools, accounts, credential handling, permissions expansion and deployments require separate explicit authority.",
+    "GitHub Actions are not assumed available. Test locally; absent verification remains unknown."
+  ]
+}

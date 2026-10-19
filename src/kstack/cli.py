@@ -56,14 +56,20 @@ def main(argv=None, api=None):
     policy, watchlist = load_config(root)
     try:
         if args.command == "list":
+            directory = root / "data"
+            if not directory.is_dir():
+                directory = Path(__file__).parent / "bundled" / "data"
             answer = {"bundled": sorted(bundled_skills(root)), "active": read_json(state / "active.json", {}),
-                      "integrations": read_json(root / "data" / "integrations.json", [])}
+                      "integrations": read_json(directory / "integrations.json", [])}
         elif args.command == "status":
             answer = report(state)
         elif args.command == "scan":
             answer = discover(api or GitHubAPI(), watchlist, state, args.limit)
         elif args.command == "assess":
             names = set(available_skills(root, state))
+            owned = read_json(state / "active.json", {}).get(args.id)
+            if owned:
+                names.discard(owned["name"])  # an update is not a new-name collision
             answer = assess(api or GitHubAPI(), policy, state, args.id, names)
         elif args.command == "promote":
             answer = promote(state, policy, args.id, json.loads(args.review.read_text(encoding="utf-8")), args.autonomous)
@@ -82,7 +88,11 @@ def main(argv=None, api=None):
             for ident, item in read_json(state / "candidates.json", {}).items():
                 if item["status"] == "discovered":
                     try:
-                        analysed = assess(api or GitHubAPI(), policy, state, ident, set(available_skills(root, state)))
+                        names = set(available_skills(root, state))
+                        owned = read_json(state / "active.json", {}).get(ident)
+                        if owned:
+                            names.discard(owned["name"])
+                        analysed = assess(api or GitHubAPI(), policy, state, ident, names)
                         answer["assessed"].append({"id": ident, "preliminary_score": analysed["preliminary_score"]})
                     except (ValueError, RuntimeError, KeyError) as exc:
                         answer["blocked"].append({"id": ident, "reason": str(exc)})

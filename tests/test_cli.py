@@ -24,6 +24,9 @@ class CliTest(unittest.TestCase):
         self.assertIn("kstack-verify", answer["installed_skill_suggestions"])
         self.assertIn("kstack-ship", answer["installed_skill_suggestions"])
         self.assertTrue(answer["conditional_guidance"])
+    def test_installed_package_fallback_profile(self):
+        answer = route("test the browser", Path("/nonexistent-checkout"), Path(self.state), "web")
+        self.assertIn("kstack-verify", answer["installed_skill_suggestions"])
     def test_unknown_profile(self):
         with self.assertRaises(ValueError): route("fix", ROOT, Path(self.state), "nonexistent")
     def test_doctor(self):

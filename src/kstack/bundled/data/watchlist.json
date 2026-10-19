@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "sources": [
+    {"repository": "Itskorrah/evolve", "paths": ["skills/", ".agents/skills/"]},
+    {"repository": "Itskorrah/replica-skill-universal", "paths": ["skills/", ".agents/skills/"]},
+    {"repository": "vercel-labs/agent-skills", "paths": ["skills/"]},
+    {"repository": "ibelick/ui-skills", "paths": ["skills/"]},
+    {"repository": "obra/superpowers", "paths": ["skills/"]}
+  ]
+}

@@ -19,4 +19,4 @@ kstack = "kstack.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-kstack = ["bundled/skills/*/SKILL.md"]
+kstack = ["bundled/skills/*/SKILL.md", "bundled/data/*.json", "bundled/profiles/*.json"]

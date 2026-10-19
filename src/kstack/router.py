@@ -24,7 +24,10 @@ def route(task: str, root: Path, state: Path, profile: str = "general") -> dict:
             selected.append(name)
     if not selected:
         selected = ["kstack-router"]
-    profiles = read_json(root / "profiles" / (profile + ".json"), None)
+    folder = root / "profiles"
+    if not folder.is_dir():
+        folder = Path(__file__).parent / "bundled" / "profiles"
+    profiles = read_json(folder / (profile + ".json"), None)
     if profiles is None:
         raise ValueError("Unknown project profile")
     advice = [x for x in profiles.get("suggestions", []) if any(k in task.lower() for k in x.get("keywords", []))]

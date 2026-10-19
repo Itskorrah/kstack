@@ -1,0 +1,1 @@
+{"name":"web","suggestions":[{"keywords":["ui","design","visual","frontend"],"guidance":"Use project-specific design tokens, React/Next.js guidance only where applicable; capture responsive screenshots."},{"keywords":["test","browser","verify"],"guidance":"Run local Playwright E2E, keyboard, mobile and accessibility checks. BreakSwarm only after authorising the target."}]}

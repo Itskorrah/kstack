@@ -21,7 +21,10 @@ def stamp():
 
 
 def load_config(root: Path) -> tuple[dict, dict]:
-    return read_json(root / "data" / "policy.json", {}), read_json(root / "data" / "watchlist.json", {})
+    directory = root / "data"
+    if not directory.is_dir():
+        directory = Path(__file__).parent / "bundled" / "data"
+    return read_json(directory / "policy.json", {}), read_json(directory / "watchlist.json", {})
 
 
 def candidate_id(repo: str, path: str) -> str:

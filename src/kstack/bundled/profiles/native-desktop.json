@@ -1,0 +1,1 @@
+{"name":"native-desktop","suggestions":[{"keywords":["ui","native","desktop","release"],"guidance":"Test on real supported macOS/Windows toolchains and OS permissions; static cross-builds are not native acceptance."},{"keywords":["security","clipboard","keyboard"],"guidance":"Test focus, input capture, accessibility grants, lifecycle and explicit consent."}]}
