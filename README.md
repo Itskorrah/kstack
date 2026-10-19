@@ -10,6 +10,16 @@ Inspect a project, route a task to a relevant workflow, install managed skill in
 
 > **v0.2 preview.** kstack provides a functional local CLI for project inspection, workflow routing, skill-file management, and verification. It works alongside Codex or Claude Code; it does not start an agent or prove that a host loaded or followed installed instructions. See the [implementation status](IMPLEMENTATION_STATUS.md).
 
+## Use with Codex — copy-and-paste workflows
+
+Open the **target project** in Codex. This prompt installs or reuses kstack safely, **verifies** its setup and immediately routes and performs real work.
+
+```text
+In my current Codex project, set up and use https://github.com/Itskorrah/kstack. Read the current README, AGENTS.md, docs/SECURITY.md and prompts/codex/setup-and-run.md. Inspect existing installed skills and Git state. Check out kstack into a safe temporary location, read its README, AGENTS.md, security model and actual CLI help. In the currently open target project, run the Python 3.10+ CLI's `doctor`, `list`, `inspect-project --project TARGET` and `route TASK --project TARGET`. Preview project-local install with `install --host codex --scope project --project TARGET --dry-run` and project bootstrap with `bootstrap --project TARGET --instructions`; apply only ownership-safe reviewed changes. Verify with `doctor --host codex --scope project --project TARGET` and `host-status`. Use the routed guidance to carry out a real, scoped target-project task. kstack does not itself invoke an agent, so Codex must perform the task and verification. Avoid installing duplicate orchestrators or executing third-party skill packages discovered by kstack. External package review, commit-pinning and explicit approvals are required. Preview verification commands before `verify-project --run`; the runner is not a sandbox. Run local verification; commit and push verified scoped changes on a feature branch, open a PR and merge when permitted without bypassing branch protections or security. Do not rely on GitHub Actions. Report evidence and blockers.
+```
+
+Additional copyable prompts: [full setup](prompts/codex/setup-and-run.md) · [update](prompts/codex/update.md) · [resume](prompts/codex/resume.md) · [extended autonomous](prompts/codex/autonomous.md).
+
 ## Why kstack
 
 Project instructions become stale, and broad prompts make it harder to keep work consistent. kstack keeps reusable workflows discoverable, recommends a focused workflow for each task, and makes project changes and verification explicit.
