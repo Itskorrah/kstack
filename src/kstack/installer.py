@@ -170,10 +170,27 @@ def doctor(root: Path, state: Path, host: str | None = None, scope: str = "globa
         checks.append({"check": "available:" + name, "ok": bool(parse_skill(content))})
     if host:
         location = skill_dir(host, scope, project, home)
-        manifest = read_json(location / ".kstack-managed.json", {"files": {}})
+        manifest_path = location / ".kstack-managed.json"
+        if not manifest_path.is_file() or manifest_path.is_symlink():
+            checks.append({"check": "host:installation_present", "ok": False})
+            return {"ok": False, "checks": checks,
+                    "note": "KStack is not installed in this host/scope; run install first."}
+        manifest = read_json(manifest_path, {})
+        expected = {name + "/SKILL.md": digest(content) for name, content in available_skills(root, state).items()}
+        if not isinstance(manifest, dict) or not isinstance(manifest.get("files"), dict):
+            checks.append({"check": "host:manifest_valid", "ok": False})
+            return {"ok": False, "checks": checks, "note": "Invalid installation manifest"}
+        checks.append({"check": "host:active_generation_matches", "ok": manifest["files"] == expected})
         for rel, expected_hash in manifest.get("files", {}).items():
+            name, sep, filename = rel.partition("/")
+            if not sep or filename != "SKILL.md" or not NAME.fullmatch(name):
+                checks.append({"check": "host:invalid_manifest_path", "ok": False})
+                continue
             path = location / rel
             ok = path.is_file() and not path.is_symlink() and digest(path.read_text(encoding="utf-8")) == expected_hash
             checks.append({"check": "installed:" + rel, "ok": ok})
+        from .external import list_external
+        external = list_external(host, scope, project, home)
+        checks.append({"check": "host:external_packages", "ok": external["ok"]})
     return {"ok": all(item["ok"] for item in checks), "checks": checks,
             "note": "File presence and integrity do not prove an agent loaded or obeyed a skill."}

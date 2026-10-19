@@ -1,62 +1,90 @@
-# Architecture and decisions
+# Architecture, contracts and decisions
 
-**v0.1 design objective:** have a small, inspectable engineering standard available to local coding hosts while evolving third-party skill selections with evidence. No daemon, database, browser service or LLM API key is needed.
+**Current version:** v0.2 development preview. KStack is a local-first control plane for an existing coding host, not a new autonomous coding model runtime.
 
-## Boundaries
-
-1. **Canonical KStack skills** (`skills/`) are portable `SKILL.md` documents with minimal trigger descriptions; the CLI installs copies into supported host folders. A separately bundled wheel copy exists so pip installs can operate without the Git repository. `AGENTS.md` and `CLAUDE.md` are repository instructions, not automatically written into arbitrary projects.
-2. **Catalogue and profiles** (`data/`, `profiles/`) supply declarative metadata and advisory routing; they do not install or execute external tools.
-3. **Read-only discovery** (`github_api.py`, `engine.py`) receives a curated list of GitHub owners/repos and directory prefixes. It reads metadata, resolves the default branch once to a commit SHA, then enumerates the immutable tree. Candidate IDs are `owner/repo:path/to/SKILL.md`.
-4. **Quarantine and evaluation** records source SHA, content hash, declared name and description, bounded static screening and preliminary score. This is a triage mechanism, not a semantic security review.
-5. **Promotion** requires explicit CLI option, curated publisher, Markdown-only single-file package, zero findings, named independent reviewer, actual sandbox rehearsal, two evidence statements and high quality/security thresholds. Approved content is immutable and stored by hash.
-6. **Host installer** verifies ownership and hashes before installing; it is idempotent, non-destructive toward unmanaged content and prunes obsolete *owned* files on a subsequent sync. It does not start agents, choose model settings or install third-party executables.
-
-## State contract
-
-State defaults to `~/.kstack`, not a tracked GitHub directory:
-
-```text
-candidates.json         # discovered, assessed and quarantined observations
-active.json             # exact approved active set (pinned hashes and commits)
-history.json            # monotonically numbered promotion/rollback actions
-objects/<sha256>.md     # approved immutable candidate text and assessed text
-snapshots/000001.json   # prior active manifest for rollback
-last-discovery.json     # time, errors and changed candidates
+```mermaid
+flowchart TD
+    A[User task + project] --> B[project.py: detect technologies and config]
+    B --> C[router.py: minimal KStack workflow and specialist candidates]
+    C --> D[Codex / Claude host: actual execution]
+    D --> E[verification.py: explicitly trusted local checks]
+    E --> F[evidence.py: hash-linked local results]
+    G[Watchlist GitHub API] --> H[engine.py: pinned candidate queue and assessment]
+    H --> I[Independent evaluator outside v0.2]
+    I -.attested review.-> J[engine.py: promotion policy gate]
+    J --> K[transaction.py: recoverable approved manifest]
+    K --> L[installer.py: host skill files]
+    L --> C
 ```
 
-This state is personal and can expose metadata about private projects. Store and back up it appropriately, never check it into a public repository, and protect OS permissions. For multi-machine use, transfer reviewed non-secret manifest data only after verifying source identity. **There is no distributed-state sync protocol** in v0.1.
+## Modules and boundaries
+
+| Module | Contract | Must not claim |
+|---|---|---|
+| `cli.py` | Explicit state-mutating versus read-only commands; JSON output and error exit codes | Every command is safe to run against untrusted local projects |
+| `project.py` | Read known root manifests; safe `kstack.json` bootstrap and managed instruction blocks | Automatic full monorepo understanding or guaranteed host use |
+| `router.py` | Deterministic task/risk/context recommendations, distinguishes bundled from candidate external skills | True semantic quality or actual model invocation |
+| `external.py` | Import reviewed, pinned local Git package data into supported host skill folder; no execution | Full safe supplier identity or functioning multi-skill integration |
+| `github_api.py` | Read-only watchlisted GitHub API operations, immutable SHA | GitHub write authority or live API acceptance |
+| `engine.py` | Candidate state, immutable content, review thresholds, promotion and rollback | Independently performed and authenticated external model reviews |
+| `queue.py` | Descriptive priority view of assessed/unassessed candidates | Proof candidate will improve developer work |
+| `state.py` | Atomic JSON file writes, cooperative write lock | Distributed transaction or protection against local user tampering |
+| `transaction.py` | Write-ahead undo journal for active/history/snapshot generation | Atomicity across all host installations |
+| `installer.py` | Managed, conflict-aware basic skills installation and file integrity | A coding host loaded or obeyed the installed skill |
+| `hosts.py` | Host executable visibility, local installation status | Authenticated host session acceptance |
+| `portfolio.py` | Export approved immutable source records; inspect against cached objects | Automatically trusted cross-machine import or signed provenance |
+| `verification.py` | Bounded explicit subprocess tests and current local Git snapshot, declared by trusted project owner | Sandbox safety or broader test coverage without configured commands |
+| `delivery.py` | Advisory preflight binding authorised delivery to a clean Git commit and fresh successful test evidence | GitHub branch/PR creation, merge or authenticated remote-state checks |
+| `evidence.py` | Hash-linked local journal and corruption detection | Signed independent evaluation evidence |
+| `feedback.py` | Honest self-reported outcome metadata and counts | Causal effectiveness improvements |
+| `scheduler.py`, `weekly.py` | External-scheduler-ready, bounded weekly API discovery | Persistent daemon or installed recurring OS task |
+
+## State directory
+
+Personal state defaults to `~/.kstack/` (override with `--state`):
+
+```text
+active.json                         # currently approved external SKILL.md objects
+history.json                        # promotion/rollback generations
+snapshots/000001.json               # previous generation
+pending-transaction.json            # transient undo journal; blocks unsafe writes
+.write-lock/owner.json              # transient cooperative mutation lock
+objects/<sha256>.md                 # pinned approved/source Markdown
+candidates.json                     # current source revision per candidate identity
+candidate-revisions.json            # bounded prior-revision metadata
+last-discovery.json                 # scan observation and errors
+maintenance-schedule.json           # local weekly attempt status
+outcomes.json                       # user-reported, explicitly unverified observations
+evidence.json                       # hash-linked local run/event metadata
+```
+
+No state is automatically uploaded into the public repository. JSON generation updates are crash-recoverable through an undo journal; the evidence log and other operations are not part of one atomic database transaction. State synchronisation across machines and signed provenance remain future requirements.
+
+## Skill integration boundaries
+
+Bundled KStack skills live under `skills/` and are mirrored into `src/kstack/bundled/skills` for wheel distribution. `installer.py` owns only the files declared in `.kstack-managed.json`; `external.py` owns manually reviewed source packages under `.kstack-external-managed.json`. Neither installer should overwrite a file owned by the other or by a user.
+
+External integration catalogue entries are metadata, not installed tools. No upstream scripts execute during installation. Full packages with code require deliberate trust review and an explicit copy permission. The actual agent host determines whether skill discovery, scripts and provider integrations are available.
 
 ## Promotion state machine
 
 ```text
-(discover) -> discovered
-                 |
-              assess
-                 |
-       +---------+-----------+
-       |                     |
-    assessed              quarantined
-       |                     |
-   independent          explanation +
-   sandbox review        manual resolution
-       |
-  trusted + high score + no blockers
-       |
-     promoted -> active manifest -> next managed host install
-       |
-   rollback snapshot -> next managed host install
+upstream source -> pinned commit -> discovered
+        -> assessed or quarantined
+        -> genuine independent sandbox review (outside v0.2)
+        -> policy check -> immutable active object
+        -> undo-journal state generation -> installed host file set
+        -> real host acceptance (outside v0.2)
 ```
 
-A new upstream SHA is a new candidate for evaluation, not an implicit upgrade. The same skill name from two active sources is forbidden. GitHub API errors are reported; incomplete/disappeared source is not treated as a passing evaluation.
+An upstream revision is a new candidate; it does not replace an approved revision without a new review. The reviewed source hash and actual approval outcome belong together. Current review JSON attestations are statements, not independently authenticated evidence.
 
-## Important non-goals
+## Non-goals
 
-- No background agent swarm or forced Sol/Luna model configuration.
-- No wholesale vendoring of pstack, Evolve or third-party licences.
-- No automatic remote shell execution, npm install, pip install, hooks or credential access.
-- No automatic GitHub branch, issue, PR or release mutation from the scanner.
-- No claim that the ChatGPT/Claude/Codex plugin hosts are equivalent.
+- Replacing Codex or Claude Code's own tools, instruction hierarchy and model selection.
+- Executing unreviewed downloaded shell scripts or creating a privileged always-on agent.
+- Running GitHub Actions when account minutes are unavailable.
+- Pretending local file checks equal real Windows/macOS/agent acceptance.
+- Building a GUI before the CLI and host integrations are dependable.
 
-## Extension path
-
-Add validated integrations as adapters with separately tested host support, isolated capability scopes and explicit licence handling. BreakSwarm is the first attractive QA adapter, but its real external target use must be accepted before it becomes a release gate. Portfolio selection (RepoPilot) should remain advisory rather than authorising merges. Project-level routing could eventually use observed task outcomes instead of keyword matching, but evaluated baselines must precede any learning claims.
+See `docs/SECURITY.md`, `docs/ACCEPTANCE.md`, `IMPLEMENTATION_STATUS.md` and `CODEX_TODO.md`.

@@ -1,53 +1,59 @@
-# KStack operations and continuous improvement
+# KStack operations and evolution
 
-## Cadence
+KStack is **externally scheduled**, not a daemon. Run the weekly maintenance entry point from an OS/user-authorised scheduler. The separate ChatGPT scheduled prompt produces intelligence reports but does not automatically inherit your local source checkout.
 
-- **Weekly:** research relevant developer agents/skills, watch monitored upstreams, record candidates and deltas, reject hype without evidence.
-- **Monthly:** deeper review of the top candidates, version changes, licence changes, duplicate capability and measured project quality.
-- **Quarterly:** review active skills for redundancy, weak selection, security posture, context bloat and regression costs.
-- **After development sessions:** record verified failure patterns, missing acceptance gates, relevant before/after outcomes and useful specialist guidance. No local data is uploaded automatically.
-
-The weekly ChatGPT scheduled intelligence brief is independent from the local KStack command line. It **does not exist until the user creates it**, and it must not assume the scheduled environment can access the user's local checkout or run isolated tests.
-
-## Routine commands
+## One-off and weekly checks
 
 ```bash
-python scripts/kstack.py list
-python scripts/kstack.py maintenance                  # network reads only; no activation
-python scripts/kstack.py status
 python scripts/kstack.py doctor
+python scripts/kstack.py status
+python scripts/kstack.py queue
+python scripts/kstack.py schedule-status
+python scripts/maintenance_runner.py              # preview; NO network requests
+python scripts/maintenance_runner.py --run        # single GitHub watchlist scan
 ```
 
-Maintenance is read-only with respect to GitHub but writes local discovery/assessment state. It downloads only `SKILL.md` candidate text for review. GitHub API limits and source changes are reported as errors, not invented matches.
+The installed package exposes `kstack` and `kstack-weekly`. The runner uses the `Australia/Sydney` timezone for calendar-week eligibility and leaves a local record of the most recent attempt. It does **not** automatically create, install or execute an OS scheduler job. Use a trusted user's scheduler with the same commands. The monthly in-depth review is **not** marked complete by a mere GitHub metadata scan; the separate research task must provide that analysis.
 
-**High-autonomy** promotion also requires review files from independent rehearsals:
+A scanner's network failure is reported as a partial attempt, not a successful evaluation. A scheduled discovery is only a read-only source observation. It cannot silently install a third-party skill.
+
+## Candidate evaluation and policy-gated promotion
 
 ```bash
-python scripts/kstack.py maintenance --apply --reviews /private/reviews
-python scripts/kstack.py install --host codex --scope global --dry-run
+python scripts/kstack.py scan
+python scripts/kstack.py assess owner/repo:skills/name/SKILL.md
+python scripts/kstack.py queue
+# Run genuine sandboxed independent review first; see docs/REVIEW_SCHEMA.md
+python scripts/kstack.py promote owner/repo:skills/name/SKILL.md --review /private/review.json --autonomous
 python scripts/kstack.py install --host codex --scope global
 ```
 
-Use `--bundled-only` for just KStack's original skills, and `--state` for an alternate local state directory. Different workstations need separate installations and careful sharing of reviewed, nonsecret approved state. Do not commit `~/.kstack` to this public repository.
+If review evidence cannot be obtained, leave the candidate assessed or quarantined. Do not invent ratings, test artefacts or reviewer identity.
 
-## Quality criteria
+For a reviewed multi-file upstream package, use the distinct `external-install` workflow documented in the root README. The `--reviewed` flag is a manual user/operator assertion; it is not a cryptographic security guarantee.
 
-Keep candidate adoption small: prioritise demonstrated user value and specific coding domains. For a difficult task, prefer additional local verification to multiplying parallel agents. Each new skill needs a precise triggering description, real nontrivial instructions, a distinct role and an honest failure/permission boundary. Never promote a tool merely because it is popular or recently announced.
+## State backup and recovery
 
-## Incident handling
+Back up the local state directory privately. `export-lock` generates a portable source/hash manifest but **does not include external skill bodies** and cannot install a copied manifest on a new machine. This avoids silently trusting unreviewed external packages on another device.
 
-1. Stop using a suspicious agent skill in the host; remove access to sensitive workspaces and revoke exposed credentials if needed.
-2. Inspect the active manifest and pinned hash; run `rollback N` to the appropriate pre-change snapshot.
-3. Reinstall managed skills into each host and restart each agent process.
-4. Investigate exact source, reviewer evidence and any host actions. If needed, remove the trust source from `data/policy.json` and the watchlist.
-5. Add a reproducible regression case before considering future updates.
+If the current generation is suspect:
 
-## Unverified milestones
+1. Stop coding agents that might use the skill.
+2. Inspect `kstack status`, `kstack evidence`, installed file hashes and any pending undo journal.
+3. Quarantine the source and revoke secrets if exposed.
+4. Restore the appropriate `kstack rollback N`, then re-run installation in each affected host; restart/reload the agent.
+5. Re-run local tests and genuine host acceptance, then write a regression test and incident summary.
 
-- First authenticated GitHub discovery against all watched upstreams.
-- Complete real-world skill invocation under Codex, Claude Code and ChatGPT plugin hosts.
-- Cross-platform Windows/macOS install/reload acceptance.
-- External Evolve/pstack/BreakSwarm automated adapters and regression tests.
-- Independent reviewer attestation signatures or verifiable host logs.
+Never bypass branch protections, change external account access or run downloaded code merely to make an update succeed. Keep credentials out of state, source control and reports.
 
-KStack's first release should be called a **local-first functional foundation**, not a production-autonomous continuous-coding agent.
+## Recommended cadence
+
+| Timing | Operational activity |
+|---|---|
+| Weekly | Scan watched GitHub sources, deduplicate candidates and produce a concise report |
+| Monthly | Deep review of promising candidates, security changes and verified stack effectiveness |
+| Quarterly | Identify redundant skills, broken hosts, outdated instructions and excess context |
+| After substantial work | Record permission-scoped, honest outcomes and failed acceptance tests |
+| On new upstream release | Evaluate a pinned revision without silently replacing the active version |
+
+Remaining unattended sandbox evaluation, signing and actual OS scheduler installation are tracked in `CODEX_TODO.md`.

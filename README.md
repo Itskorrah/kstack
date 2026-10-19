@@ -2,180 +2,217 @@
 
 # kstack
 
-**A better default for coding agents. A developer stack that improves on evidence.**
+**A reproducible, evidence-driven developer stack for coding agents.**
 
-Portable skills · Local-first tooling · High-autonomy governance · Reproducible installs
+Use the right skills for the right task. Prove what works. Improve the stack without trusting every new tool on the internet.
 
-[Quick start](#quick-start) · [How it works](#how-kstack-works) · [Update policy](#evolution--updates) · [Architecture](docs/ARCHITECTURE.md) · [Security](docs/SECURITY.md) · [Maintainer guide](docs/MAINTENANCE.md)
+**Local-first · Python standard library · Portable skill instructions · Version-pinned reviews · No hosted CI required**
+
+[Start](#quick-start) · [Capabilities](#what-works-today) · [Command reference](#commands) · [Evolution](#discovery-and-evolution) · [Security](docs/SECURITY.md) · [Remaining work](CODEX_TODO.md)
 
 </div>
 
-> **Status — v0.1 foundation.** KStack is an installable, Python-standard-library skill management CLI, four developer workflows plus one onboarding skill, a portable plugin manifest, project-specific routing, read-only GitHub candidate discovery, evidence-based promotion and rollback. Local unit tests pass. **It is not an always-on agent, does not integrate or execute all external frameworks, and has not completed authenticated GitHub API or ChatGPT/Codex/Claude host acceptance.** [Limitations](#current-limitations) are part of the product contract.
+> **Status: v0.2 development preview.** The source contains a functional CLI, project detection, recommended skill routing, host-specific skill installation, reviewed local multi-file skill-package copying, pinned GitHub discovery, evaluation gates, rollback, local verification and weekly-runner entry points. **It is not an autonomous AI runtime.** Real Codex/Claude invocation, third-party skill effectiveness, live GitHub discovery, secure candidate execution and a deployed recurring schedule are **not yet independently accepted**. See [status matrix](IMPLEMENTATION_STATUS.md).
 
-## Why KStack
+## Why it exists
 
-Repeatedly pasting an enormous development prompt is a poor way to enforce engineering standards. KStack keeps the stable parts in versioned skills, makes relevant instructions discoverable to compatible hosts, and treats external skills as *candidates* until there is evidence they improve actual projects.
+Coding agents are more useful when they have good engineering guidance, but copy-pasting dozens of instructions into every chat is a maintenance problem. KStack keeps general skills discoverable, chooses the smallest appropriate workflow, and separates actual evidence from model-generated assertions. It delegates implementation to an existing coding host; KStack itself does **not** spawn Codex, Claude or paid models.
 
-KStack prefers **one lead workflow plus the smallest relevant specialists**. Adding more agents isn't the goal. Better tested, maintainable software is.
-
-```text
-Task in Codex or Claude Code
-           │
-           ▼
-  KStack router + project profile
-           │
-           ├── Engineering audit / architecture
-           ├── Evolve, if separately installed and appropriate
-           ├── Framework and UI specialists, if present
-           └── Independent verification
-           │
-           ▼
-  Fresh local checks → verified delivery
-
-Read-only GitHub discovery ──> Quarantine / assessment
-                                      │
-                     pinned source + independent rehearsal
-                                      │
-                          policy and evidence gate
-                                      │
-                         promote / revert / reinstall
+```mermaid
+flowchart TD
+    A[Development task + repository] --> B[Project detector + KStack router]
+    B --> C[Installed KStack workflows]
+    B --> D[Available specialist candidates]
+    C --> E[Existing coding agent: Codex / Claude]
+    D -.review and install first.-> E
+    E --> F[Trusted local test commands]
+    F --> G[Verification evidence + authorised delivery]
+    H[Watchlisted GitHub sources] --> I[Candidate queue + pinned assessment]
+    I --> J{Independent review and policy gates}
+    J -->|Verified, approved| K[Managed skills]
+    J -->|Blocked| L[Quarantine / manual review]
+    K --> B
 ```
 
 ## Quick start
 
-Requirements: **Python 3.10+** and a local checkout. No `pip install` is necessary for the checkout CLI; no runtime dependencies, API key or hosted CI are required for offline commands.
+Requires **Python 3.10+**, Git for reviewed local external packages, and an existing coding-agent host if you want an agent to actually use skills. No runtime Python dependencies are required.
 
 ```bash
 git clone https://github.com/Itskorrah/kstack.git
 cd kstack
+python scripts/kstack.py doctor                 # checks source, not host invocation
 python scripts/kstack.py list
-python scripts/kstack.py route "Improve the Jotstead web interface and test it" --profile web
+python scripts/kstack.py inspect-project --project .
+python scripts/kstack.py route "Improve the Python code and test it" --project .
+```
+
+Install the **bundled KStack skills** into Codex or Claude Code:
+
+```bash
 python scripts/kstack.py install --host codex --scope global --dry-run
 python scripts/kstack.py install --host codex --scope global
 python scripts/kstack.py doctor --host codex --scope global
+python scripts/kstack.py host-status --host codex --scope global
+
+# Or use --host claude. To install into one repository:
+python scripts/kstack.py install --host codex --scope project --project /path/to/app
 ```
 
-For Claude Code:
+The installer preserves unmanaged files and refuses to overwrite locally modified managed skills. A successful `doctor` means the installed files match KStack's hashes; it **does not prove Codex or Claude loaded them**. Host invocation remains a separate acceptance requirement. The `host-status` command reports binary presence and file integrity without inventing model-session acceptance.
+
+### Bootstrap a repository
 
 ```bash
-python scripts/kstack.py install --host claude --scope global --dry-run
-python scripts/kstack.py install --host claude --scope global
-python scripts/kstack.py doctor --host claude --scope global
+python scripts/kstack.py inspect-project --project /path/to/app
+python scripts/kstack.py bootstrap --project /path/to/app --instructions  # preview only
+python scripts/kstack.py bootstrap --project /path/to/app --instructions --apply
+python scripts/kstack.py route "Refactor the user interface" --project /path/to/app
 ```
 
-Install in one project instead:
+Bootstrap generates `kstack.json` only if absent; with `--instructions`, it adds managed sections to `AGENTS.md` and `CLAUDE.md`, preserving existing content and refusing malformed markers. It does not install all external tools, grant permissions, install a background daemon or alter existing project tests.
+
+A simple project configuration looks like:
+
+```json
+{
+  "version": 1,
+  "profile": "python",
+  "skill_preferences": [],
+  "verification_commands": [["python", "-m", "unittest", "discover", "-s", "tests", "-v"]],
+  "delivery": {"verify_before_merge": true}
+}
+```
+
+**Only put commands you trust in `verification_commands`.** KStack runs them as subprocesses only when you explicitly supply `--run`; this command runner is **not a security sandbox**, and should never be pointed at unreviewed upstream instructions.
 
 ```bash
-python scripts/kstack.py install --host codex --scope project --project /absolute/path/to/project
+python scripts/kstack.py verify-project --project /path/to/app     # preview
+python scripts/kstack.py verify-project --project /path/to/app --run --timeout 120
+python scripts/kstack.py evidence
 ```
 
-The installer writes **only managed `SKILL.md` files** to supported host directories. It will refuse to overwrite pre-existing different content or locally modified managed files. `--dry-run` previews changes; `uninstall` removes only KStack-managed files. Reload the host and test skill discovery yourself — the `doctor` command verifies files and hashes, not model behaviour.
+## What works today
 
-For both hosts, the installed core skills are `kstack-router`, `kstack-audit`, `kstack-verify`, `kstack-ship` and `kstack-setup`. For example, a configured Codex agent can be asked to use `$kstack-router`; in Claude Code, use `/kstack-router`. Natural-language skill selection is host-dependent and must be verified after installation.
-
-## How KStack works
-
-| Component | Included | Responsibility |
+| Capability | Implemented | Real-world acceptance |
 |---|---|---|
-| KStack Router | Yes | Choose minimal relevant workflows; no agent-process execution |
-| KStack Audit | Yes | Inspect actual architecture, blast radius and threats |
-| KStack Verify | Yes | Fresh local testing and honest, scoped evidence |
-| KStack Ship | Yes | Release documentation and authorised GitHub delivery |
-| KStack Setup | Yes | Guide one-time skill installation and verification |
-| Project profiles | Yes | Web, native desktop, mobile, Python, AI agent, general |
-| External ecosystem catalogue | Yes | Evolve, pstack, Superpowers, UI skills, Vercel, BreakSwarm and more **as metadata** |
-| GitHub candidate scanner | Yes | Check pinned source trees and find `SKILL.md` candidates (needs network) |
-| Auto-promotion gate | Yes | Requires stringent screening, independent sandbox review and pinned content |
-| Runtime multi-agent swarm | No | Uses an existing coding host; never claims to spawn agents |
-| BreakSwarm/RepoPilot MCP bridge | Not yet | Their catalogue entries are not working integrations |
-| Hosted scheduled job | Not provisioned | A scheduler prompt is provided; it must be separately installed |
+| Bundled skills: router, audit, verify, ship, setup, maintenance, project | Yes | File and format checks; live host invocation pending |
+| Local project detection and bootstrapping | Yes | Deterministic fixtures tested |
+| Risk-aware task routing | Yes | Tested locally; no LLM semantic reasoning or invocation |
+| Host skill file install / uninstall / integrity doctor | Yes | Filesystem tests; native Codex/Claude pending |
+| Manually reviewed local external package copying | Yes | Clean Git SHA + actual copy tests; upstream execution pending |
+| Read-only GitHub discovery and source pinning | Yes | Mocked API tests; live network pending |
+| Candidate screening, evidence-gated auto-promotion | Yes | Deterministic review/policy tests; independent host reviewer still external |
+| Crash-recoverable skill generation history and rollback | Yes | Simulated crash/rollback tests; not a distributed transaction |
+| Approved-skill lock export and inspection | Yes | Hash and source validation tested; full multi-machine import pending |
+| Explicit local verification command runner | Yes | Real subprocess pass/fail and failure-path tests |
+| Hash-linked local evidence and outcome recording | Yes | Integrity tests; not signed provenance or causal learning |
+| Weekly maintenance runner and candidate queue | Yes | Local schedule logic tested; no OS task installed |
+| Real BreakSwarm / RepoPilot integrations | No | Catalogue metadata only |
+| GitHub delivery preflight | Yes | Bound to clean Git revision and local successful test evidence; no write adapter |
+| Runtime multi-agent coordination / automatic model selection | No | Delegated to supported coding hosts |
+| Live authenticated agent-provider integration | No | Awaiting host access and API acceptance |
 
-KStack will not copy third-party repositories or execute their scripts merely because the catalogue lists them. Use their own documented installation processes and respect licence obligations.
+## Commands
 
-### Commands
-
-| Command | What it actually does |
+| Command | Action / safety boundary |
 |---|---|
-| `list` | Show bundled and promoted skills, plus tracked external integrations |
-| `route "task" --profile web` | Suggest KStack skills and conditional project guidance |
-| `scan` | Read configured GitHub repositories and record changed source commits |
-| `assess "owner/repo:path/to/SKILL.md"` | Read skill at an immutable commit; screen, score, quarantine and hash |
-| `promote ID --review review.json --autonomous` | Adopt only if independently reviewed and all high-autonomy gates pass |
-| `maintenance [--apply --reviews DIR]` | Discover/assess candidates; optionally promote qualifying reviewed ones |
-| `status` | Produce a machine-readable state and blocker report |
-| `rollback SNAPSHOT` | Restore prior active-skill manifest; reinstall hosts afterwards |
-| `install` / `uninstall` | Install or remove managed host skills without overwriting user edits |
-| `doctor` | Verify local source/installed file integrity |
+| `list` | Enumerate bundled, promoted and referenced external skills |
+| `inspect-project --project PATH` | Read known project manifests; no execution |
+| `bootstrap --project PATH [--instructions] [--apply]` | Preview or add a minimal project profile/instruction blocks |
+| `route "TASK" [--project PATH]` | Recommend available KStack workflows; label external suggestions clearly |
+| `install / uninstall --host codex\|claude` | Synchronise or remove only KStack-owned skill files |
+| `doctor [--host ...]` | Check local integrity; missing host install returns failure |
+| `host-status --host ...` | Report host binary and skill file status, not live invocation |
+| `external-install --source PATH --skill-dir PATH --commit SHA ...` | Preview a clean, pinned Git checkout skill package; actual copy requires `--apply --reviewed`; executable files also require `--allow-code` |
+| `external-list --host ...` | Detect installed package tampering and missing files |
+| `scan` | Read watchlisted GitHub repositories; record changed commits |
+| `assess ID` | Analyse exact pinned candidate `SKILL.md`, with defensive screening |
+| `queue` | Display pending, assessed and quarantined revisions |
+| `promote ID --review FILE --autonomous` | Apply policy-gated approval to a pinned single-file Markdown skill |
+| `maintenance [--apply --reviews DIR]` | Discover/assess and optionally promote independently reviewed candidates |
+| `rollback SNAPSHOT` | Restore prior approved manifest using an undo journal; reinstall host skills afterwards |
+| `export-lock --file FILE [--apply]` | Preview or export approved immutable skill references |
+| `inspect-lock --file FILE` | Validate lockfile references and locally cached skill hashes |
+| `verify-project --project PATH [--run]` | Preview or run only trusted project-declared commands |
+| `evidence` | Verify append-only journal hash chain (not a cryptographic signature) |
+| `delivery-plan --project PATH --repository OWNER/REPO [--authorised]` | Check fresh clean Git revision, locally recorded passing verification and task authority; **never pushes or merges** |
+| `record-outcome --file FILE` / `outcomes` | Record and aggregate clearly self-reported engineering outcomes |
+| `schedule-status` | Show whether a weekly maintenance run is due |
 
-Use `python scripts/kstack.py COMMAND --help` for arguments. GitHub reads may require `GITHUB_TOKEN` for sufficient API rate limits or private repositories; this variable is read from the process environment, not saved in KStack. Do not put tokens in files or chat.
+Use `python scripts/kstack.py COMMAND --help` for exact arguments. The installed package also exposes `kstack` and `kstack-weekly` entry points.
 
-## Evolution & updates
+## Reviewed external packages
 
-High autonomy **does not mean trust every update**. KStack has three stages:
-
-1. **Discover** — a scheduled assistant can research official releases and nominate new tools; the CLI scans specifically watched GitHub repositories and pins their commit SHA.
-2. **Evaluate** — locally examine the exact `SKILL.md`, detect executable dependencies or suspicious instructions, confirm project relevance and independently rehearse the skill in a disposable test project. The preliminary CLI score is not an AI quality judgement.
-3. **Promote** — an independently produced evidence review (`docs/REVIEW_SCHEMA.md`) must pass the configured threshold. The high-autonomy flag allows eligible additions without an extra manual review step. Approved text is stored by SHA-256 and installed only when requested.
-
-For a dry research pass:
+KStack does not automatically vendor Evolve, pstack, Superpowers or other third-party ecosystems. Their entries in `data/integrations.json` are references, **not proof of installation**. To import a skill from a separately reviewed, clean local Git checkout:
 
 ```bash
-python scripts/kstack.py maintenance
+# Obtain and independently review the upstream checkout first.
+git -C /path/to/evolve rev-parse HEAD
+python scripts/kstack.py external-install \
+  --host codex --scope project --project /path/to/app \
+  --source /path/to/evolve --skill-dir skills/evolve \
+  --commit FULL_40_CHARACTER_COMMIT
+
+# After reviewing source, licence, included files, permissions and compatibility:
+python scripts/kstack.py external-install \
+  --host codex --scope project --project /path/to/app \
+  --source /path/to/evolve --skill-dir skills/evolve \
+  --commit FULL_40_CHARACTER_COMMIT --apply --reviewed --allow-code
+```
+
+Replace the example `--skill-dir` with the actual skill directory in the chosen checkout; the example path may vary between upstream revisions. The installer copies bytes only; it **does not execute the repository's install scripts or validate the agent's runtime behaviour**. `--allow-code` is a separate explicit risk decision for packages with scripts/assets. Skills lacking transitive siblings or external dependencies may remain unusable until separately integrated and host-tested.
+
+## Discovery and evolution
+
+The GitHub scanner reads only watched repositories from `data/watchlist.json`. For each discovered `SKILL.md`, KStack resolves an immutable commit, saves candidate metadata and preserves bounded revision history. It uses fair round-robin candidate selection rather than filling the scan exclusively from a large first repository.
+
+```bash
+python scripts/kstack.py scan                  # network reads; may require GITHUB_TOKEN
+python scripts/kstack.py maintenance           # assess discovered candidates
+python scripts/kstack.py queue
 python scripts/kstack.py status
 ```
 
-After an independent reviewer has created a truthful review JSON file and actually rehearsed the candidate in an isolated environment:
+Promotion requires a reviewed pinned source, no screening blockers, an allowlisted publisher, a single-file Markdown package, an independently attested isolated rehearsal, and the configured quality/security thresholds. **A submitted review JSON is not independently authenticated by KStack**; this is an unresolved provenance limitation. KStack never executes candidate scripts during discovery, assessment or promotion.
+
+Use the [review contract](docs/REVIEW_SCHEMA.md) and [maintenance procedures](docs/MAINTENANCE.md). High autonomy is permission-bounded; it does not imply authority to disable controls or access private project data.
+
+### Scheduled maintenance
 
 ```bash
-python scripts/kstack.py maintenance --apply --reviews /private/path/to/reviews
-python scripts/kstack.py install --host codex --scope global
+python scripts/maintenance_runner.py                      # report only; no network
+python scripts/maintenance_runner.py --run                # one bounded GitHub discovery run
+python scripts/kstack.py schedule-status
 ```
 
-A change to a monitored upstream repository creates a new candidate; it does not silently replace an already approved revision. Auto-promotion accepts **single-file Markdown-only** skills, requires an allowlisted publisher, no screening flags, and an independent score of at least **92/100** with security confidence at least **95/100**. No skill code, hooks or external scripts run during screening or installation. These are restrictive *policy rules*, not a guarantee that text cannot contain malicious instructions. Review the [threat model](docs/SECURITY.md).
+The installed wheel exposes `kstack-weekly`. Arrange invocation using **your own approved external scheduler** (macOS launchd, Windows Task Scheduler, cron or another service). KStack does not register a task or keep a background process alive. A successful weekly scan is not an independent quality evaluation. The separate [ChatGPT intelligence task prompt](docs/SCHEDULER_PROMPT.md) can perform research/reporting but does not inherit your local computer or coding-agent permissions.
 
-If you prefer to switch back to a previous generation:
+## Security and operational limits
 
-```bash
-python scripts/kstack.py rollback 1
-python scripts/kstack.py install --host codex --scope global
-```
+- Candidate skills and other GitHub content are **untrusted instructions**, even if their publisher is allowlisted. Source pinning and screening are necessary but not sufficient safeguards.
+- `external-install` requires clean local Git state, exact commit, manually asserted review, code permission for non-documentation files and hash-checked copies. It is **not** automatic third-party supply-chain verification.
+- KStack's local test runner is only for trusted project commands, not arbitrary downloaded code. Local evaluation requires a separately isolated environment.
+- `GITHUB_TOKEN` is read from the process environment for API requests and never persisted by the CLI. Never paste credentials in public reports.
+- Skill state under `~/.kstack/` is local, not encrypted. Multi-file promotion/rollback uses an undo journal and a cooperative write lock; this does not secure data against a malicious local account.
+- No real Codex or Claude Code session has been run in this environment. A host's installed skill files and a valid plugin manifest are **not** proof of actual implicit invocation.
+- The repository is public: do not commit secrets, private user files or unreviewed external skill contents.
 
-`rollback 1` means “restore the state saved before the first promotion” — not “version 1 of a particular skill”. The snapshots reside under `~/.kstack/snapshots/` and are local. Reinstall or update each host after any manifest change; a rollback does not remotely update agents.
+Read the [security model](docs/SECURITY.md), [architecture](docs/ARCHITECTURE.md) and [acceptance plan](docs/ACCEPTANCE.md).
 
-For a weekly watch and monthly deeper recommendation process, use the [ready-to-copy scheduled brief](docs/SCHEDULER_PROMPT.md). **No scheduled task is currently created or running by this repository.**
-
-## Installation and security model
-
-KStack stores local state at `~/.kstack/` by default (override with `--state`). Discovery contacts only GitHub's API. Candidate source is pinned to commit SHA and stored as UTF-8 Markdown in a content-addressed object store. Neither the scanner nor the installer invokes source text as commands.
-
-Credentials are passed through environment variables. The CLI does not log a token. Host-installed skills can influence agents that possess powerful tools — review any skill before giving it authority, particularly third-party instructions. A trusted GitHub account, a clean regex scan and an apparently high evaluation score **do not certify safety**.
-
-The repository is currently public; never place private project data, API keys or personal test output inside it.
-
-## Development and verification
-
-From the checkout:
+## Develop and contribute
 
 ```bash
 PYTHONPATH=src python -m unittest discover -s tests -v
-python -m compileall -q src/kstack scripts/kstack.py
+python -m compileall -q src/kstack scripts
 python scripts/kstack.py doctor
+python scripts/kstack.py schedule-status
 ```
 
-No GitHub Actions are required, configured or used by KStack's local verification. Tests cover parsing, path restrictions, quarantine, pinned candidates, independent-review gates, promotion, rollback, file ownership, installs, failure handling and routing. Unit tests with a fake GitHub API **do not prove live rate limits, actual remote response compatibility or production-host integration**.
+GitHub Actions are **not required**, and KStack's local verification does not claim any hosted CI results. To preview delivery safety after verified tests on a clean Git working tree, use `kstack delivery-plan --project /path/to/app --repository OWNER/REPO --authorised`; this does not create branches or merge anything. Source changes should include meaningful tests and precise capability claims. Do not add a second orchestrator by default, use unverifiable scoring as security evidence, or copy external code without a licence review.
 
-## Current limitations
-
-- No agent/model is executed by the KStack Python CLI; agent routing is a recommendation. Sol/Luna model selection is determined by your coding host and its actual availability.
-- External integrations are explicitly *catalogue entries*, not already installed features. KStack does not yet install Evolve, pstack or BreakSwarm automatically.
-- An independent agent or human must do the actual semantic quality/security review and isolated rehearsal; the CLI validates the review's structure, not the truth of the claims.
-- Only `SKILL.md`-only Markdown packages qualify for unattended promotion. More complex dependencies or executable capabilities remain quarantined.
-- Periodic discovery runs only when something invokes `scan` or `maintenance`; no background service or scheduled task is bundled.
-- ChatGPT plugin availability, compatibility and installation still require testing in an actual host. The portable plugin manifest alone does not register a cloud app or grant integrations.
-- Runtime downloads, licence attribution, live OAuth, Windows native host behaviour and public release distribution remain outside the verified v0.1 scope.
-
-See [architecture](docs/ARCHITECTURE.md), [maintenance](docs/MAINTENANCE.md), [review evidence contract](docs/REVIEW_SCHEMA.md) and [security](docs/SECURITY.md) for specifics.
+See [implementation status](IMPLEMENTATION_STATUS.md), [known gaps and Codex handover](CODEX_TODO.md) and [changelog](CHANGELOG.md).
 
 ## Licence
 
-KStack's original code and its own skills are MIT-licensed. Third-party skill and tool licences remain their respective authors' licences. The external catalogue lists references only and does not relicense upstream content.
+KStack's own code and bundled skills are MIT-licensed. Third-party content remains under its respective licences; references and package installers do not transfer ownership or licence rights.

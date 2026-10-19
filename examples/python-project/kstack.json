@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "profile": "python",
+  "skill_preferences": [],
+  "verification_commands": [["python", "-m", "unittest", "discover", "-s", "tests", "-v"]],
+  "delivery": {"verify_before_merge": true}
+}

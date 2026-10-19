@@ -1,6 +1,6 @@
 {
   "name": "kstack",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Portable engineering workflows for repository auditing, skill selection, independent verification and verified delivery.",
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "repository": "https://github.com/Itskorrah/kstack",
