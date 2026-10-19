@@ -16,8 +16,8 @@ class PortableExternalPackageTests(unittest.TestCase):
         self.root = Path(tmp.name)
         self.root.joinpath("skills", "alpha").mkdir(parents=True)
         (self.root / "skills/alpha/SKILL.md").write_text(
-            "---\\nname: alpha\\ndescription: Thorough local validation of trustworthy project changes.\\n---\\n"
-            "Review changes and verify their behaviour with tests.\\n", encoding="utf-8"
+            "---\nname: alpha\ndescription: Thorough local validation of trustworthy project changes.\n---\n"
+            "Review changes and verify their behaviour with tests.\n", encoding="utf-8"
         )
 
     def commit_fixture(self):
@@ -49,7 +49,7 @@ class PortableExternalPackageTests(unittest.TestCase):
         other = self.root / "skills/ALPHA"
         other.mkdir()
         (other / "SKILL.md").write_text(
-            "---\\nname: beta\\ndescription: Carefully validate a project before release.\\n---\\n",
+            "---\nname: beta\ndescription: Carefully validate a project before release.\n---\n",
             encoding="utf-8"
         )
         if (self.root / "skills/alpha").samefile(other):
