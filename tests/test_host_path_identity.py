@@ -1,7 +1,6 @@
 """Adversarial host transaction tests; no platform host or network required."""
 import hashlib
 import json
-import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -86,12 +85,13 @@ class HostRecoveryPreflightTests(unittest.TestCase):
         self.assertEqual((self.root / "b.txt").read_bytes(), b"new-b")
         self.assertTrue((self.root / HOST_JOURNAL).exists())
 
-    @unittest.skipIf(os.name == "nt", "Separate case variants require a case-sensitive fixture filesystem")
     def test_colliding_journal_paths_do_not_rollback(self):
         self.interrupted([
             ("A.txt", b"old-a", b"new-a", b"new-a"),
             ("a.txt", b"old-b", b"new-b", b"new-b"),
         ])
+        if (self.root / "A.txt").samefile(self.root / "a.txt"):
+            self.skipTest("Host filesystem cannot distinguish case variants")
         with self.assertRaisesRegex(ValueError, "case-insensitive"):
             recover_host_files(self.root)
         self.assertEqual((self.root / "A.txt").read_bytes(), b"new-a")
