@@ -1,0 +1,1 @@
+{"name":"ai-agent","suggestions":[{"keywords":["agent","autonomous","tool"],"guidance":"Limit authority, tool scopes, tokens, run budgets, cancellation, independent validation and traceable outcomes."},{"keywords":["test","evaluation"],"guidance":"Use adversarial fixtures, bounded agent behaviour, repeatability tests and output provenance."}]}

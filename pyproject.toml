@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kstack-devstack"
+version = "0.1.0"
+description = "A local-first, evidence-driven skill catalogue and installer for coding agents"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "KStack contributors"}]
+keywords = ["agents", "skills", "developer-tools", "codex", "claude"]
+
+[project.scripts]
+kstack = "kstack.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+kstack = ["bundled/skills/*/SKILL.md"]

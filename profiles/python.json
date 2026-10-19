@@ -1,0 +1,1 @@
+{"name":"python","suggestions":[{"keywords":["test","data","refactor"],"guidance":"Validate dtype/schema invariants, representative data cases, regression tests and failure paths."},{"keywords":["performance"],"guidance":"Benchmark memory, CPU, elapsed time and dataset parity separately."}]}
