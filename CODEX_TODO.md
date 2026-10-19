@@ -296,3 +296,11 @@
 4. Merge verified work when authorised and safe. If real host credentials are absent, implement/test standalone components and move on instead of blocking the whole programme.
 
 **No future task in this file should be labelled complete until its objective acceptance criteria have genuinely been met.**
+
+## 20 October 2026 update — KSK-303 / KSK-503 Git revision binding
+
+- **Classification:** P1 partially implemented, environment-blocked runtime verification. A new draft branch fix/verification-revision-stability-20261020 (starting main b6924a1d29d07bd15325dbf666984ccb1e7c0450) adds before/after revision consistency to verify_project. Timeout/missing-tool receipts contain argv hashes/duration, not secret-bearing raw command arguments.
+- **Files:** src/kstack/verification.py; tests/test_verification_revision_stability.py; IMPLEMENTATION_STATUS.md.
+- **Evidence:** Remote source diff and GitHub readback only; tests written but **not run**. Direct Git clone blocked by DNS; no hosted Actions attempted.
+- **Resume:** git fetch origin; git switch fix/verification-revision-stability-20261020; PYTHONPATH=src python -m unittest discover -s tests -v; python -m compileall -q src/kstack scripts tests; python scripts/kstack.py doctor; python scripts/kstack.py schedule-status.
+- **Acceptance:** Five new tests and existing suite pass; a check that changes HEAD or clean state cannot produce successful verification or qualify for delivery readiness; unchanged Git and non-Git projects preserve expected behaviour. Distinguish this implemented source guard from stronger signed evidence, secure execution and live delivery adapters, which remain outside this slice.
