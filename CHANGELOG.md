@@ -11,6 +11,11 @@
 - Added fair round-robin GitHub candidate discovery, bounded upstream revision metadata and candidate queue.
 - Added portable approved-skill lock export/inspection, self-reported outcome tracking and an externally schedulable weekly watchlist scanner.
 - Added `kstack-maintain` and `kstack-project` skills, local tests, acceptance guidance, accurate status matrix and detailed `CODEX_TODO.md` handover.
+- Added conservative Agent Skills metadata parsing, declared monorepo inspection and owner-reviewed per-workspace verification targets.
+- Added a shared kernel-released state lock with explicit stale recovery, recoverable host file transactions, retained host-generation rollback and unmanaged-file ownership checks.
+- Added local sibling-skill dependency resolution through the documented KStack `kstack-package.json` extension, with SemVer constraints and installed capability reporting.
+- Added hash-checked external skill removal with dependent checks, dry-run preview and preservation of user edits and unrelated files.
+- Made routing report available versus installed workflow files and external capabilities without claiming real host invocation.
 - Real Codex/Claude/ChatGPT host execution, live GitHub API acceptance, sandboxed agent evaluation and OS scheduler installation are **not** claimed.
 
 ## 0.1.0 — 2026-10-19

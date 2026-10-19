@@ -6,8 +6,10 @@ from unittest.mock import patch
 
 from kstack.cli import ROOT
 from kstack.engine import discover, assess, promote, rollback
-from kstack.state import read_json, write_json, lock_state
-from kstack.transaction import commit_generation, recover
+from kstack.state import (read_json, write_json, lock_state, lock_status,
+                          recover_stale_lock)
+from kstack.transaction import (commit_generation, recover, commit_host_files,
+                                recover_host_files, HOST_JOURNAL, STAGE_PREFIX)
 from kstack.portfolio import export_lock, inspect_lock
 from kstack.feedback import record, summary
 from kstack.hosts import inspect_host
@@ -66,6 +68,104 @@ class LifecycleExtended(unittest.TestCase):
         self.assertEqual(read_json(self.state / 'active.json'), {})
         self.assertEqual(read_json(self.state / 'history.json'), [])
         self.assertFalse((self.state / 'pending-transaction.json').exists())
+
+    def test_host_install_rolls_back_partial_multi_file_commit(self):
+        from kstack import transaction
+        host = self.state / "host"
+        host.mkdir(parents=True)
+        (host / "a.txt").write_text("old-a")
+        (host / "b.txt").write_text("old-b")
+        original = transaction.os.replace
+        failed = {"done": False}
+        def fail_second(source, destination):
+            if Path(destination).name == "b.txt" and not failed["done"]:
+                failed["done"] = True
+                raise OSError("simulated interruption")
+            return original(source, destination)
+        with patch.object(transaction.os, "replace", side_effect=fail_second):
+            with self.assertRaisesRegex(OSError, "interruption"):
+                commit_host_files(host, {"a.txt": b"new-a", "b.txt": b"new-b"})
+        self.assertEqual((host / "a.txt").read_text(), "old-a")
+        self.assertEqual((host / "b.txt").read_text(), "old-b")
+        self.assertFalse((host / HOST_JOURNAL).exists())
+
+    def test_host_install_recovers_interrupted_generation(self):
+        import hashlib
+        host = self.state / "host"
+        host.mkdir(parents=True)
+        old, new = b"previous", b"next"
+        target = host / "skill/SKILL.md"
+        target.parent.mkdir()
+        target.write_bytes(new)  # Simulate a process that stopped after replacement.
+        stage_name = STAGE_PREFIX + "a" * 32
+        stage = host / stage_name
+        backup = stage / "backup/skill/SKILL.md"
+        backup.parent.mkdir(parents=True)
+        backup.write_bytes(old)
+        write_json(host / HOST_JOURNAL, {"format": 1, "stage": stage_name, "entries": [{
+            "path": "skill/SKILL.md", "old_sha256": hashlib.sha256(old).hexdigest(),
+            "old_mode": 0o644, "new_sha256": hashlib.sha256(new).hexdigest()}]})
+        self.assertTrue(recover_host_files(host)["recovered"])
+        self.assertEqual(target.read_bytes(), old)
+        self.assertFalse((host / HOST_JOURNAL).exists())
+
+    def test_host_recovery_preserves_unexpected_user_edit(self):
+        import hashlib
+        host = self.state / "host"
+        host.mkdir(parents=True)
+        target = host / "skill/SKILL.md"
+        target.parent.mkdir()
+        target.write_bytes(b"user edit")
+        stage_name = STAGE_PREFIX + "b" * 32
+        stage = host / stage_name
+        backup = stage / "backup/skill/SKILL.md"
+        backup.parent.mkdir(parents=True)
+        backup.write_bytes(b"old")
+        write_json(host / HOST_JOURNAL, {"format": 1, "stage": stage_name, "entries": [{
+            "path": "skill/SKILL.md", "old_sha256": hashlib.sha256(b"old").hexdigest(),
+            "old_mode": 0o644, "new_sha256": hashlib.sha256(b"new").hexdigest()}]})
+        with self.assertRaisesRegex(ValueError, "manual recovery"):
+            recover_host_files(host)
+        self.assertEqual(target.read_bytes(), b"user edit")
+        self.assertTrue((host / HOST_JOURNAL).exists())
+
+    def test_host_transaction_rejects_windows_drive_path(self):
+        host = self.state / "host"
+        host.mkdir(parents=True)
+        with self.assertRaisesRegex(ValueError, "relative path"):
+            commit_host_files(host, {"C:/outside.txt": b"must not be written"})
+        self.assertEqual(list(host.iterdir()), [])
+
+    def test_stale_state_lock_recovery_requires_dead_owner(self):
+        import json
+        import socket
+        lock = self.state / ".kstack-write.lock"
+        lock.parent.mkdir(parents=True)
+        pid = 2_000_000_000
+        lock.write_text(json.dumps({"pid": pid, "hostname": socket.gethostname(), "locked": True}))
+        status = lock_status(self.state)
+        self.assertTrue(status["stale_owner"])
+        self.assertTrue(recover_stale_lock(self.state, pid)["recovered"])
+        self.assertFalse(lock_status(self.state)["stale_owner"])
+
+    def test_legacy_directory_lock_recovery_requires_dead_owner(self):
+        import json
+        import socket
+        lock = self.state / ".write-lock"
+        lock.mkdir(parents=True)
+        pid = 2_000_000_000
+        (lock / "owner.json").write_text(json.dumps({"pid": pid, "hostname": socket.gethostname(), "locked": True}))
+        status = lock_status(self.state)
+        self.assertTrue(status["stale_owner"])
+        self.assertTrue(recover_stale_lock(self.state, pid)["recovered"])
+        self.assertFalse(lock.exists())
+
+    def test_released_state_lock_does_not_need_recovery(self):
+        with lock_state(self.state):
+            pass
+        owner = read_json(self.state / ".kstack-write.lock", {})
+        with self.assertRaisesRegex(ValueError, "already released"):
+            recover_stale_lock(self.state, owner["pid"])
 
     def test_portable_lock_validated(self):
         self.state.mkdir()

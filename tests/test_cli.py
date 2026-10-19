@@ -21,12 +21,12 @@ class CliTest(unittest.TestCase):
         self.assertGreaterEqual(len(json.loads(out.getvalue())["bundled"]), 4)
     def test_route(self):
         answer = route("test the browser and push a release", ROOT, Path(self.state), "web")
-        self.assertIn("kstack-verify", answer["installed_skill_suggestions"])
-        self.assertIn("kstack-ship", answer["installed_skill_suggestions"])
+        self.assertIn("kstack-verify", [x["name"] for x in answer["workflow_suggestions"]])
+        self.assertIn("kstack-ship", [x["name"] for x in answer["workflow_suggestions"]])
         self.assertTrue(answer["conditional_guidance"])
     def test_installed_package_fallback_profile(self):
         answer = route("test the browser", Path("/nonexistent-checkout"), Path(self.state), "web")
-        self.assertIn("kstack-verify", answer["installed_skill_suggestions"])
+        self.assertIn("kstack-verify", [x["name"] for x in answer["workflow_suggestions"]])
     def test_unknown_profile(self):
         with self.assertRaises(ValueError): route("fix", ROOT, Path(self.state), "nonexistent")
     def test_doctor(self):
