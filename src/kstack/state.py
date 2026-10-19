@@ -33,3 +33,28 @@ def write_json(path: Path, data) -> None:
 
 def app_state(path: str | None = None) -> Path:
     return Path(path).expanduser().resolve() if path else Path.home() / ".kstack"
+
+
+from contextlib import contextmanager
+
+@contextmanager
+def lock_state(path: Path):
+    """Prevent concurrent KStack mutations using exclusive directory creation.
+
+    A stale lock blocks writes instead of silently replacing another owner's
+    lock; recovery requires manual inspection and removal.
+    """
+    lock = path / ".write-lock"
+    path.mkdir(parents=True, exist_ok=True)
+    if path.is_symlink() or lock.is_symlink():
+        raise ValueError("State lock path cannot be a symlink")
+    try:
+        lock.mkdir()
+    except FileExistsError as exc:
+        raise ValueError("KStack state is locked; inspect .write-lock before retrying") from exc
+    try:
+        (lock / "owner.json").write_text(json.dumps({"pid": os.getpid()}), encoding="utf-8")
+        yield
+    finally:
+        (lock / "owner.json").unlink(missing_ok=True)
+        lock.rmdir()
