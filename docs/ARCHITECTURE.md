@@ -22,15 +22,15 @@ flowchart TD
 | Module | Contract | Must not claim |
 |---|---|---|
 | `cli.py` | Explicit state-mutating versus read-only commands; JSON output and error exit codes | Every command is safe to run against untrusted local projects |
-| `project.py` | Read known root manifests; safe `kstack.json` bootstrap and managed instruction blocks | Automatic full monorepo understanding or guaranteed host use |
-| `router.py` | Deterministic task/risk/context recommendations, distinguishes bundled from candidate external skills | True semantic quality or actual model invocation |
-| `external.py` | Import reviewed, pinned local Git package data into supported host skill folder; no execution | Full safe supplier identity or functioning multi-skill integration |
+| `project.py` | Read known root manifests and declared npm/pnpm/Cargo workspaces; safe `kstack.json` bootstrap, owner-reviewed workspace verification suggestions and managed instruction blocks | Automatic full monorepo understanding or guaranteed host use |
+| `router.py` | Deterministic task/risk/context recommendations; distinguishes available workflows, installed files and candidate external skills | True semantic quality or actual model invocation |
+| `external.py` | Import and remove reviewed, pinned local Git package data; resolve KStack-declared sibling dependencies and capabilities; no execution | Full safe supplier identity or functioning multi-skill integration |
 | `github_api.py` | Read-only watchlisted GitHub API operations, immutable SHA | GitHub write authority or live API acceptance |
 | `engine.py` | Candidate state, immutable content, review thresholds, promotion and rollback | Independently performed and authenticated external model reviews |
 | `queue.py` | Descriptive priority view of assessed/unassessed candidates | Proof candidate will improve developer work |
-| `state.py` | Atomic JSON file writes, cooperative write lock | Distributed transaction or protection against local user tampering |
-| `transaction.py` | Write-ahead undo journal for active/history/snapshot generation | Atomicity across all host installations |
-| `installer.py` | Managed, conflict-aware basic skills installation and file integrity | A coding host loaded or obeyed the installed skill |
+| `state.py` | Atomic JSON file writes and OS-released advisory write lock with owner metadata | Distributed transaction or protection against local user tampering |
+| `transaction.py` | Write-ahead state journal; staged host file journal, rollback snapshots and interrupted-transaction recovery | Simultaneous atomic visibility of a multi-file generation or atomicity across hosts |
+| `installer.py` | Managed, conflict-aware host skill generations, integrity checks, explicit recovery and retained rollback | A coding host loaded or obeyed the installed skill |
 | `hosts.py` | Host executable visibility, local installation status | Authenticated host session acceptance |
 | `portfolio.py` | Export approved immutable source records; inspect against cached objects | Automatically trusted cross-machine import or signed provenance |
 | `verification.py` | Bounded explicit subprocess tests and current local Git snapshot, declared by trusted project owner | Sandbox safety or broader test coverage without configured commands |
@@ -48,7 +48,7 @@ active.json                         # currently approved external SKILL.md objec
 history.json                        # promotion/rollback generations
 snapshots/000001.json               # previous generation
 pending-transaction.json            # transient undo journal; blocks unsafe writes
-.write-lock/owner.json              # transient cooperative mutation lock
+.kstack-write.lock                    # persistent owner record + kernel-released lock
 objects/<sha256>.md                 # pinned approved/source Markdown
 candidates.json                     # current source revision per candidate identity
 candidate-revisions.json            # bounded prior-revision metadata
@@ -58,13 +58,19 @@ outcomes.json                       # user-reported, explicitly unverified obser
 evidence.json                       # hash-linked local run/event metadata
 ```
 
+Each host skill folder also uses `.kstack-host.lock` to serialize core and external installers, `.kstack-host-transaction.json` plus a private staging directory while a file transaction is pending, and `.kstack-generations/<id>/` for retained core-skill rollback data. The journal is written before replacement; KStack replaces managed files one at a time and writes the managed manifest last. If interrupted, `recover-install` validates paths and hashes and restores the old generation. Until recovery, host readers could see a partial file set.
+
 No state is automatically uploaded into the public repository. JSON generation updates are crash-recoverable through an undo journal; the evidence log and other operations are not part of one atomic database transaction. State synchronisation across machines and signed provenance remain future requirements.
 
 ## Skill integration boundaries
 
-Bundled KStack skills live under `skills/` and are mirrored into `src/kstack/bundled/skills` for wheel distribution. `installer.py` owns only the files declared in `.kstack-managed.json`; `external.py` owns manually reviewed source packages under `.kstack-external-managed.json`. Neither installer should overwrite a file owned by the other or by a user.
+Bundled KStack skills live under `skills/` and are mirrored into `src/kstack/bundled/skills` for wheel distribution. `installer.py` owns only files declared in `.kstack-managed.json`; `external.py` owns manually reviewed source packages under `.kstack-external-managed.json`. Both use the same host lock and transaction journal. Neither installer may adopt or overwrite a file owned by the other or by a user, even if its bytes happen to match.
 
-External integration catalogue entries are metadata, not installed tools. No upstream scripts execute during installation. Full packages with code require deliberate trust review and an explicit copy permission. The actual agent host determines whether skill discovery, scripts and provider integrations are available.
+External integration catalogue entries are metadata, not installed tools. KStack's optional `kstack-package.json` format 1 extension declares sibling skills with `name`, `path`, `version`, optional versioned `dependencies`, and optional `provides` capability IDs. Resolution checks missing/incompatible/cyclic dependencies, duplicate names or capabilities, path escapes and tracked-file hashes before any write. This format is a KStack extension, not an upstream standard. No upstream scripts execute during installation. Full packages with code require deliberate trust review and an explicit copy permission. The actual agent host determines whether skill discovery, scripts and provider integrations are available.
+
+Project inspection recognises declared npm, pnpm and Cargo workspace patterns within bounded limits and reports per-target technologies. Verification suggestions are advisory. Config v2 can explicitly store `verification_targets`, each containing a project-relative `path` and argument-list `commands`; the owner must review these commands before `verify-project --run` executes them from the target directory. Bootstrap never copies inferred commands into trusted configuration.
+
+Routing accepts a host and scope to inspect installed bundled workflow files and external capability manifests. Results distinguish `available-not-installed` from `installed-files-unverified`; neither establishes host invocation.
 
 ## Promotion state machine
 

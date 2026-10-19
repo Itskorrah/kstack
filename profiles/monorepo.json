@@ -1,0 +1,13 @@
+{
+  "name": "monorepo",
+  "suggestions": [
+    {
+      "keywords": ["workspace", "monorepo", "multiple", "integration", "cross-platform"],
+      "guidance": "Inspect each declared project root and its local instructions. Keep framework-specific changes and verification within the correct workspace; avoid assuming a root manifest describes every target."
+    },
+    {
+      "keywords": ["test", "verify", "regression", "build"],
+      "guidance": "Review each proposed workspace verification command before adding it to kstack.json. Run only the explicitly configured commands and report per-target results."
+    }
+  ]
+}

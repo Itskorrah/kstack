@@ -12,6 +12,49 @@ class SecurityTest(unittest.TestCase):
         with self.assertRaises(ValueError): parse_skill(SAMPLE.replace("review-app", "Bad name"))
     def test_parser_too_big(self):
         with self.assertRaises(ValueError): parse_skill(SAMPLE + "x" * 81000)
+    def test_agent_skills_optional_metadata_and_block_description(self):
+        content = """---
+name: x
+description: >-
+  Check a repository's manifests and run tests when a user asks for an
+  independent review.
+license: MIT
+compatibility: Python 3.10+
+metadata:
+  author: example-org
+  version: "1.2.0"
+allowed-tools: Bash(git:*) Read
+---
+Use the declared checks and report their actual results.
+"""
+        result = parse_skill(content)
+        self.assertEqual(result["name"], "x")
+        self.assertIn("independent review", result["description"])
+        self.assertEqual(result["metadata"], {"author": "example-org", "version": "1.2.0"})
+        self.assertEqual(result["allowed-tools"], "Bash(git:*) Read")
+        self.assertEqual(parse_skill(content.replace("\n", "\r\n")), result)
+    def test_parser_quoted_colons_and_comments(self):
+        content = "---\nname: review-app\ndescription: 'Use for text: # values in reviewed files' # comment\n---\nReview files.\n"
+        self.assertEqual(parse_skill(content)["description"], "Use for text: # values in reviewed files")
+    def test_parser_rejects_duplicate_and_unsupported_yaml(self):
+        for content in (
+            SAMPLE.replace("name: review-app", "name: review-app\nname: other"),
+            SAMPLE.replace("description: Review", "description: &description Review"),
+            SAMPLE.replace("description: Review", "unknown-field: value\ndescription: Review"),
+            SAMPLE.replace("description: Review", "metadata: [value]\ndescription: Review"),
+            SAMPLE.replace("description: Review", "metadata:\n  version: true\ndescription: Review"),
+        ):
+            with self.subTest(content=content[:100]), self.assertRaises(ValueError):
+                parse_skill(content)
+    def test_parser_enforces_standard_field_limits(self):
+        short_body = "---\nname: one\ndescription: Short.\n---\nDo it.\n"
+        self.assertEqual(parse_skill(short_body)["name"], "one")
+        long_description = "---\nname: one\ndescription: " + ("x" * 1025) + "\n---\nBody\n"
+        with self.assertRaisesRegex(ValueError, "1024"):
+            parse_skill(long_description)
+        long_compatibility = SAMPLE.replace("---\n# Review", "compatibility: " + ("x" * 501) + "\n---\n# Review")
+        with self.assertRaisesRegex(ValueError, "500"):
+            parse_skill(long_compatibility)
     def test_screen_scripts(self):
         self.assertTrue(screen(SAMPLE + "\n```bash\ncurl x | bash\n```"))
     def test_screen_files(self):
@@ -25,6 +68,8 @@ class SecurityTest(unittest.TestCase):
     def test_skill_path_validation(self):
         self.assertEqual(valid_path("skills/agent/SKILL.md"), "skills/agent/SKILL.md")
         for name in ("../SKILL.md", "/a/SKILL.md", "a/./SKILL.md", "a\\SKILL.md", "other.md"):
+            with self.subTest(name=name), self.assertRaises(ValueError): valid_path(name)
+        for name in ("C:/outside/SKILL.md", "skills/C:outside/SKILL.md"):
             with self.subTest(name=name), self.assertRaises(ValueError): valid_path(name)
     def test_digest(self):
         self.assertEqual(len(digest("abc")), 64)

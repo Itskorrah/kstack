@@ -59,7 +59,9 @@ python scripts/kstack.py host-status --host codex --scope global
 python scripts/kstack.py install --host codex --scope project --project /path/to/app
 ```
 
-The installer preserves unmanaged files and refuses to overwrite locally modified managed skills. A successful `doctor` means the installed files match KStack's hashes; it **does not prove Codex or Claude loaded them**. Host invocation remains a separate acceptance requirement. The `host-status` command reports binary presence and file integrity without inventing model-session acceptance.
+The installer preserves unmanaged files and refuses to adopt or overwrite them, even when their bytes match a bundled skill. Managed host updates use a recoverable file transaction and retain the previous generation for `rollback-install`. If a process stops during an update, run `recover-install` before other host mutations. A successful `doctor` means the installed files match KStack's hashes; it **does not prove Codex or Claude loaded them**. Host invocation remains a separate acceptance requirement. The `host-status` command reports binary presence and file integrity without inventing model-session acceptance.
+
+State writes use an OS advisory lock with persistent owner metadata. Use `lock-status` to inspect it; `recover-lock --owner-pid PID` only clears verified stale ownership after the process has stopped. A legacy `.write-lock` directory also blocks writes until explicitly inspected and recovered.
 
 ### Bootstrap a repository
 
@@ -72,6 +74,8 @@ python scripts/kstack.py route "Refactor the user interface" --project /path/to/
 
 Bootstrap generates `kstack.json` only if absent; with `--instructions`, it adds managed sections to `AGENTS.md` and `CLAUDE.md`, preserving existing content and refusing malformed markers. It does not install all external tools, grant permissions, install a background daemon or alter existing project tests.
 
+Project inspection recognises declared npm, pnpm and Cargo workspace roots and reports per-root technology and verification suggestions. Suggestions are not copied into trusted commands automatically. In configuration version 2, a project owner can review and explicitly add per-workspace `verification_targets`; KStack runs each target's argument-list commands from that target directory only after `verify-project --run` is requested.
+
 A simple project configuration looks like:
 
 ```json
@@ -81,6 +85,20 @@ A simple project configuration looks like:
   "skill_preferences": [],
   "verification_commands": [["python", "-m", "unittest", "discover", "-s", "tests", "-v"]],
   "delivery": {"verify_before_merge": true}
+}
+```
+
+For a monorepo, configuration version 2 can hold reviewed commands per workspace:
+
+```json
+{
+  "version": 2,
+  "profile": "monorepo",
+  "verification_commands": [],
+  "verification_targets": [
+    {"path": "apps/web", "commands": [["npm", "test"]]},
+    {"path": "packages/api", "commands": [["python", "-m", "unittest", "discover", "-s", "tests"]]}
+  ]
 }
 ```
 
@@ -98,12 +116,13 @@ python scripts/kstack.py evidence
 |---|---|---|
 | Bundled skills: router, audit, verify, ship, setup, maintenance, project | Yes | File and format checks; live host invocation pending |
 | Local project detection and bootstrapping | Yes | Deterministic fixtures tested |
-| Risk-aware task routing | Yes | Tested locally; no LLM semantic reasoning or invocation |
+| Declared monorepo roots and per-root verification targets | Yes | Synthetic npm workspace tested; suggestions require owner review |
+| Risk-aware, host-aware task routing | Yes | Installed file and capability status tested; no semantic model reasoning or host invocation |
 | Host skill file install / uninstall / integrity doctor | Yes | Filesystem tests; native Codex/Claude pending |
-| Manually reviewed local external package copying | Yes | Clean Git SHA + actual copy tests; upstream execution pending |
+| Manually reviewed local external package copying and sibling dependencies | Yes | Clean Git SHA, version graph, full-file hash and copy tests; upstream execution pending |
 | Read-only GitHub discovery and source pinning | Yes | Mocked API tests; live network pending |
 | Candidate screening, evidence-gated auto-promotion | Yes | Deterministic review/policy tests; independent host reviewer still external |
-| Crash-recoverable skill generation history and rollback | Yes | Simulated crash/rollback tests; not a distributed transaction |
+| Crash-recoverable state and host skill generations with rollback | Yes | Simulated recovery and rollback tests; interrupted host writes need recovery, not a distributed transaction |
 | Approved-skill lock export and inspection | Yes | Hash and source validation tested; full multi-machine import pending |
 | Explicit local verification command runner | Yes | Real subprocess pass/fail and failure-path tests |
 | Hash-linked local evidence and outcome recording | Yes | Integrity tests; not signed provenance or causal learning |
@@ -120,12 +139,16 @@ python scripts/kstack.py evidence
 | `list` | Enumerate bundled, promoted and referenced external skills |
 | `inspect-project --project PATH` | Read known project manifests; no execution |
 | `bootstrap --project PATH [--instructions] [--apply]` | Preview or add a minimal project profile/instruction blocks |
-| `route "TASK" [--project PATH]` | Recommend available KStack workflows; label external suggestions clearly |
+| `route "TASK" [--project PATH] [--host codex\|claude --scope project\|global]` | Recommend workflows and report installed-file status; does not claim host invocation |
 | `install / uninstall --host codex\|claude` | Synchronise or remove only KStack-owned skill files |
+| `recover-install --host ... [--scope ...]` | Recover an interrupted host file transaction before further host mutations |
+| `rollback-install --host ... [--scope ...]` | Restore the retained prior KStack-managed host generation when its files are unchanged |
 | `doctor [--host ...]` | Check local integrity; missing host install returns failure |
 | `host-status --host ...` | Report host binary and skill file status, not live invocation |
 | `external-install --source PATH --skill-dir PATH --commit SHA ...` | Preview a clean, pinned Git checkout skill package; actual copy requires `--apply --reviewed`; executable files also require `--allow-code` |
 | `external-list --host ...` | Detect installed package tampering and missing files |
+| `external-uninstall --host ... --name SKILL [--dry-run]` | Remove only hash-matching files recorded for one external skill; refuses installed dependents and preserves user edits |
+| `lock-status` / `recover-lock --owner-pid PID` | Inspect or explicitly recover a verified stale state lock |
 | `scan` | Read watchlisted GitHub repositories; record changed commits |
 | `assess ID` | Analyse exact pinned candidate `SKILL.md`, with defensive screening |
 | `queue` | Display pending, assessed and quarantined revisions |
@@ -161,7 +184,25 @@ python scripts/kstack.py external-install \
   --commit FULL_40_CHARACTER_COMMIT --apply --reviewed --allow-code
 ```
 
-Replace the example `--skill-dir` with the actual skill directory in the chosen checkout; the example path may vary between upstream revisions. The installer copies bytes only; it **does not execute the repository's install scripts or validate the agent's runtime behaviour**. `--allow-code` is a separate explicit risk decision for packages with scripts/assets. Skills lacking transitive siblings or external dependencies may remain unusable until separately integrated and host-tested.
+Replace the example `--skill-dir` with the actual skill directory in the chosen checkout; the example path may vary between upstream revisions. The installer copies bytes only; it **does not execute the repository's install scripts or validate the agent's runtime behaviour**. `--allow-code` is a separate explicit risk decision for packages with scripts/assets. KStack's optional `kstack-package.json` format 1 is a local extension for declaring sibling skills, SemVer dependencies and provided capabilities; it is not an upstream package standard. Unsupported or undeclared external dependencies may still leave a skill unusable until separately integrated and host-tested.
+
+Use `external-uninstall --host codex --scope project --project /path/to/app --name evolve --dry-run` to preview removal, then omit `--dry-run` to remove the hash-matching files. Remove installed dependents first. Locally edited or unrelated files are preserved, and an interrupted removal can be recovered with `recover-install`.
+
+```json
+{
+  "format": 1,
+  "skills": [
+    {
+      "name": "coordinator",
+      "path": "skills/coordinator",
+      "version": "1.0.0",
+      "dependencies": [{"name": "audit", "specifier": ">=1.0.0,<2.0.0"}],
+      "provides": ["orchestration.example"]
+    },
+    {"name": "audit", "path": "skills/audit", "version": "1.2.0", "provides": ["review.audit"]}
+  ]
+}
+```
 
 ## Discovery and evolution
 
@@ -191,10 +232,10 @@ The installed wheel exposes `kstack-weekly`. Arrange invocation using **your own
 ## Security and operational limits
 
 - Candidate skills and other GitHub content are **untrusted instructions**, even if their publisher is allowlisted. Source pinning and screening are necessary but not sufficient safeguards.
-- `external-install` requires clean local Git state, exact commit, manually asserted review, code permission for non-documentation files and hash-checked copies. It is **not** automatic third-party supply-chain verification.
+- `external-install` requires clean local Git state, exact commit, manually asserted review, code permission for non-documentation files and hash-checked copies. It refuses to adopt unowned files and rejects POSIX/Windows rooted package paths. It is **not** automatic third-party supply-chain verification.
 - KStack's local test runner is only for trusted project commands, not arbitrary downloaded code. Local evaluation requires a separately isolated environment.
 - `GITHUB_TOKEN` is read from the process environment for API requests and never persisted by the CLI. Never paste credentials in public reports.
-- Skill state under `~/.kstack/` is local, not encrypted. Multi-file promotion/rollback uses an undo journal and a cooperative write lock; this does not secure data against a malicious local account.
+- Skill state under `~/.kstack/` is local, not encrypted. State changes use a kernel-released advisory lock. Core and external host-file changes use a write-ahead journal, per-file atomic replacement and retained rollback snapshots; a crash can expose a partial generation until `recover-install` completes. These mechanisms do not secure data against a malicious local account.
 - No real Codex or Claude Code session has been run in this environment. A host's installed skill files and a valid plugin manifest are **not** proof of actual implicit invocation.
 - The repository is public: do not commit secrets, private user files or unreviewed external skill contents.
 
@@ -207,6 +248,8 @@ PYTHONPATH=src python -m unittest discover -s tests -v
 python -m compileall -q src/kstack scripts
 python scripts/kstack.py doctor
 python scripts/kstack.py schedule-status
+python scripts/kstack.py lock-status
+python scripts/kstack.py route "Fix a workspace regression" --project /path/to/app --host codex --scope project
 ```
 
 GitHub Actions are **not required**, and KStack's local verification does not claim any hosted CI results. To preview delivery safety after verified tests on a clean Git working tree, use `kstack delivery-plan --project /path/to/app --repository OWNER/REPO --authorised`; this does not create branches or merge anything. Source changes should include meaningful tests and precise capability claims. Do not add a second orchestrator by default, use unverifiable scoring as security evidence, or copy external code without a licence review.

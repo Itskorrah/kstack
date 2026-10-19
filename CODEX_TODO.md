@@ -44,19 +44,19 @@
 ### KSK-101 — Transactional installation and recovery
 
 - **Original requirements:** Workstreams 01, 07, 13; crash safety, integrity, rollback, concurrency and recovery.
-- **State:** PARTIAL. `src/kstack/transaction.py` adds a write-ahead undo journal for `active.json`, `history.json` and promotion/rollback snapshots; `state.lock_state` guards CLI mutations; `installer.py` has file-level atomic writes and a corrected non-vacuous `doctor`. `tests/test_lifecycle_extended.py` covers crash-recovery simulation.
-- **Remaining:** Make **host** installation transactional across complete skill generations. Stage verified file trees, atomically switch installed versions where platform permits, retain old versions for rollback, add explicit stale-lock recovery and process ownership checks. Resolve races between the core installer and external installer. Extend consistency checks to external manifests, previous generation, current approved lock and CLI state. Use a secure file-lock mechanism on supported operating systems and test abrupt interruption at each transition point.
-- **Why not completed:** Cross-platform host filesystem behaviour and real multiprocess/native tests are unavailable in this session; JSON state transaction is not an all-host transaction.
+- **State:** PARTIAL. State mutations use an OS-released advisory lock with process/host metadata and explicit stale-owner recovery; old `.write-lock` directories require inspection. Core and external host changes share a lock and use staged, hash-checked file transactions, a write-ahead journal, retained core-generation backups, explicit recovery and rollback. Unmanaged files are never adopted. Local tests cover process contention, interruption recovery and preservation of unexpected user edits.
+- **Remaining:** Validate abrupt interruption at every filesystem transition and native Windows/macOS semantics; complete host doctor checks for every retained generation and external manifest edge case; improve rollback reporting and test concurrent real host clients. Multi-file replacement is recoverable after `recover-install`, but readers can observe a partially replaced generation while an interrupted transaction awaits recovery.
+- **Why not completed:** Only local Linux and deterministic process/filesystem fixtures are available; they cannot establish native host filesystem or cross-platform acceptance.
 - **Files:** `src/kstack/installer.py`, `external.py`, `state.py`, `transaction.py`, `hosts.py`, `tests/test_installer.py`, `tests/test_lifecycle_extended.py`.
-- **Implementation:** Define versioned install manifest, staging directory and commit marker. Include file/dir `fsync` where supported, preflight ownership, symlink rejection, no overwrite of unowned content, restore-or-resume recovery and two-process contention testing. Never remove user-edited files silently. Add migration from v0.1/v0.2 manifests.
-- **Tests:** Local `PYTHONPATH=src python -m unittest discover -s tests -v`, forced `OSError` at every write boundary, terminated subprocess recovery, concurrent installers, symlink/junction attacks, Windows ACL/drive cases, macOS APFS paths.
-- **Acceptance:** An interrupted install leaves either the previous or complete next generation; `doctor` detects every partial state; rollback restores the previous working host installation without losing unrelated files.
+- **Implementation:** Retain the format-versioned host manifest, staging directory, commit-marker ordering, file/directory `fsync` where supported, preflight ownership, symlink/junction rejection, hash-checked backup and recovery. Continue fault injection at each write/replace boundary and preserve compatibility with old core manifests.
+- **Tests:** Local `PYTHONPATH=src python -m unittest discover -s tests -v`, simulated interruption/recovery, a separate-process state lock, rollback and user-edit conflict cases. Still add exhaustive replace-boundary injection, host-install multiprocess contention, Windows ACL/drive cases and macOS APFS paths.
+- **Acceptance:** After `recover-install`, an interrupted install returns to the complete previous generation; `doctor` detects inconsistent installed content; `rollback-install` restores the previous managed generation without touching unrelated files.
 
 ### KSK-102 — Independent source, provenance and security validation
 
 - **Original:** 01, 06, 07; trust and untrusted third-party skills.
-- **State:** PARTIAL. `security.py` implements conservative text screening; `external.py` checks a clean pinned Git checkout and requires `--reviewed` plus `--allow-code` for non-documentation files; `github_api.py` pins metadata requests. This is not proof of safety.
-- **Remaining:** Authenticate provenance beyond a claimed local Git remote, inspect dependencies/hook execution, verify licences and redistribution rights, protect against instruction injection, require capability grants and enforce isolation during rehearsals. Build maintained trust/revocation policies with publisher key rotation and an emergency disable path. Support immutable source archives and track all included file hashes, not only `SKILL.md`.
+- **State:** PARTIAL. `security.py` performs conservative text screening; `external.py` requires a clean pinned local Git checkout, disables configured Git filesystem-monitor helpers during inspection, records hashes for every installed file and requires `--reviewed` plus `--allow-code` for non-documentation files. Host installs refuse unmanaged files and symlink/junction paths. GitHub metadata reads are pinned; none of these checks authenticates publisher identity or proves safety.
+- **Remaining:** Authenticate provenance beyond a claimed local Git remote, inspect hooks and executable behavior, verify licences/redistribution rights, defend against instruction injection, and enforce isolation during rehearsals. Build maintained trust/revocation policies with publisher key rotation and an emergency disable path. Add immutable source archives and signed review/test evidence.
 - **Why:** Robust security review requires external sandbox tools, trusted source identity and authenticated evidence, absent here.
 - **Files:** `src/kstack/security.py`, `external.py`, `github_api.py`, `engine.py`, `data/policy.json`, `docs/SECURITY.md`.
 - **Implementation:** Introduce typed provenance policy and capability manifest; static checks plus human/independent model challenge; isolated network-denied test runner; supply-chain licence/SBOM advisory checks. Treat downloaded instructions as data. Never treat allowlisted owner, regex pass or high rating as proof. Require stronger approval for executable hooks, secrets, network permissions and deployment.
@@ -66,12 +66,12 @@
 ### KSK-103 — Standards-compliant skill metadata and dependency resolver
 
 - **Original:** 01, 02, 07, 15.
-- **State:** PARTIAL. `parse_skill` recognises basic frontmatter. `external.inspect_package` copies reviewed multi-file local packages but does not resolve nested dependencies.
-- **Remaining:** Implement accepted Agent Skills YAML frontmatter, bundled references/assets/scripts metadata, extensions and host-specific restrictions. Resolve version ranges, skill-name conflicts, transitive sibling dependencies and cyclic dependencies, with explicit provider of each capability.
+- **State:** PARTIAL. `parse_skill` recognises a conservative subset of Agent Skills frontmatter fields, quoted scalars and folded/literal descriptions. `external.inspect_package` supports reviewed multi-file local packages and the KStack `kstack-package.json` format 1 extension for sibling version constraints, dependency ordering and capability providers.
+- **Remaining:** Complete broader YAML/spec compatibility and official conformance fixtures; preserve and report licence/compatibility details more fully; support external dependencies beyond declared local siblings and define host-specific restrictions. The KStack package manifest is not an upstream standard.
 - **Why:** Real external package diversity and complete specification variants were not available for live acceptance.
 - **Files:** `src/kstack/security.py`, `external.py`, `installer.py`, `router.py`, `data/integrations.json`.
-- **Implementation:** Choose established parser or deliberately implement a limited, documented subset with conformance fixtures. Build deterministic dependency graph, detect cycles and compatibility gaps, preserve licences and emit a resolved lockfile.
-- **Tests:** Official positive/negative fixtures, multi-file Evolve package, collisions, code-containing paths, missing references, circular deps and incompatible host versions.
+- **Implementation:** Document the parser's accepted subset and fail closed outside it. Keep dependency resolution deterministic, reject cycles, incompatible/missing siblings, path escapes, name/capability conflicts and mismatched files; preserve source commit and hashes. Add official positive/negative fixtures and publish the package extension schema.
+- **Tests:** Specification-derived frontmatter fixtures, multi-file dependency package, collisions, code-containing paths, missing references, circular dependencies, incompatible versions and path escapes. A representative upstream package and real host remain untested.
 - **Acceptance:** Every claimed supported package resolves and installs consistently; unsupported formats fail with actionable diagnostics and no partial writes.
 
 ### KSK-104 — Codex, Claude Code and ChatGPT plugin acceptance
@@ -89,8 +89,8 @@
 ### KSK-201 — Production Evolve integration
 
 - **Original:** 02 and 04.
-- **State:** PARTIAL. KStack catalogues `Itskorrah/evolve`, and `external-install` can copy an individually reviewed pinned package from a clean local Git checkout, including optional scripts behind an extra grant.
-- **Remaining:** Implement a curated Evolve adapter that resolves its coordinator and all necessary siblings/references/scripts as one compatible package; install with manifest ownership and verify `$evolve` / `/evolve` functionality in real host sessions. Do not copy an incomplete coordinator and call it integrated.
+- **State:** PARTIAL. KStack catalogues `Itskorrah/evolve`; `external-install` can copy reviewed pinned packages from a clean local checkout. A KStack-specific manifest can resolve declared sibling skills, dependencies and capabilities, and optional scripts require an extra grant.
+- **Remaining:** Validate the actual Evolve repository structure and licence, build a curated compatible package, and verify `$evolve` / `/evolve` functionality in real host sessions. Do not call the generic resolver a production Evolve adapter or copy an incomplete coordinator and call it integrated.
 - **Blocker:** No actual Evolve checkout or coding host execution available in this sandbox; GitHub's remote clone URL is inaccessible from its shell.
 - **Files:** `data/integrations.json`, `src/kstack/external.py`, `router.py`, `skills/kstack-router/SKILL.md`.
 - **Actions:** Inspect upstream Evolve installer and licence; choose direct skill integration versus upstream documented installer; pin exact revision; implement adapter with dependency graph and verification. Use project-level and global scopes; avoid a second orchestrator.
@@ -122,11 +122,11 @@
 ### KSK-204 — Monorepo and persistent project configuration
 
 - **Original:** 04.
-- **State:** PARTIAL. `project.py` detects several root manifests, writes a conservative `kstack.json` and managed `AGENTS.md`/`CLAUDE.md` sections; `router.py` uses the inferred profile.
-- **Remaining:** Multi-root monorepo analysis, Swift package variants, Expo/Flutter platforms, native build tooling, Rust workspace detection, type-safe config migrations and explicit project policy precedence. Extend `verification_commands` discovery without adopting untrusted commands automatically.
+- **State:** PARTIAL. `project.py` detects several root manifests and declared npm, pnpm and Cargo workspace members, reports per-root profile and owner-reviewed verification suggestions, writes a conservative `kstack.json` and managed instruction blocks. Config v2 accepts explicit per-root verification targets; commands are never auto-adopted from manifests.
+- **Remaining:** Broaden nested/multi-root workspace and Swift/Expo/Flutter/native-tool detection, formalise type-safe config migrations and project policy precedence, and validate mixed projects in real host sessions. Keep suggested commands separate from trusted execution configuration.
 - **Blocker:** Real mixed-project samples and native host environments required for credible acceptance.
 - **Files:** `src/kstack/project.py`, `router.py`, `verification.py`, `profiles/`, `tests/test_new_features.py`.
-- **Actions:** Add workspace graph, nested manifests, per-target toolchains and checked-in project config schema. Persist override explanations. Preserve pre-existing instructions under all circumstances.
+- **Actions:** Extend the bounded workspace graph and checked-in config schema; add nested workspace and per-target toolchain coverage. Persist override explanations. Preserve pre-existing instructions under all circumstances.
 - **Tests:** Synthetic monorepo with Python + Next + Rust, invalid profiles, pre-existing config, symlink attacks, host-specific projects.
 - **Acceptance:** Project-scoped bootstrap selects correct capabilities across multiple languages without destructive edits or permission escalation.
 
@@ -135,11 +135,11 @@
 ### KSK-301 — Semantic capability matching and measured router quality
 
 - **Original:** 05, 10, 14.
-- **State:** PARTIAL. `router.py` provides deterministic project-aware task/risk classification, static specialist scores and clear candidate/unverified labels.
-- **Remaining:** Build a truthful capability registry for **actually installed** external skills, semantic intent classification through available host model tools, ambiguity handling, conflict rules, true skill availability and confidence/provenance reporting. Explicitly favour one lead orchestrator and minimal specialist overhead.
+- **State:** PARTIAL. `router.py` provides deterministic project-aware task/risk classification and now distinguishes available bundled workflows from files installed in the selected host scope. It checks external package capabilities and reports installed files as unverified by the host.
+- **Remaining:** Add semantic intent classification, ambiguity/conflict handling, host-provided skill availability and confidence/provenance reporting. The on-disk capability registry cannot prove implicit invocation or actual skill behavior. Explicitly favour one lead orchestrator and minimal specialist overhead.
 - **Blocker:** No live coding-host agent API or real implicit invocation test environment.
 - **Files:** `src/kstack/router.py`, `project.py`, `hosts.py`, `external.py`, `data/integrations.json`.
-- **Actions:** Introduce capability IDs and validated host availability inputs, deterministic fallback with explicit uncertainty, optional model-assisted reasoning, positive/negative routing fixtures from Jotstead/BreakSwarm/Clicky Bro and task-aware evaluation metrics.
+- **Actions:** Add host-supplied availability evidence, deterministic fallback with explicit uncertainty, optional model-assisted reasoning, positive/negative routing fixtures from Jotstead/BreakSwarm/Clicky Bro and task-aware evaluation metrics.
 - **Tests:** Cases where keyword-only router fails, trivial edits, mixed frameworks, specialist missing, credential-sensitive actions, duplicate skills, unstable host availability.
 - **Acceptance:** Routing recommendations select relevant **installed** capabilities, do not imply a host invoked them, and materially improve acceptance outcomes against a documented baseline.
 
@@ -157,8 +157,8 @@
 ### KSK-303 — Reusable end-to-end quality and native/browser adapters
 
 - **Original:** 09 and 11.
-- **State:** PARTIAL. `verification.py` executes **trusted explicit** argument-list commands with timeouts, captures real outcomes and appends local evidence. `kstack-verify` gives review instructions.
-- **Remaining:** Build framework-specific verified check profiles, Playwright/BreakSwarm adapter, GUI screenshot capture, accessibility, native Swift/WPF/Flutter/React Native acceptance, failure/recovery tests and reviewer isolation. Separate fresh tests from stale evidence. The current subprocess runner is **not sandboxed**.
+- **State:** PARTIAL. `verification.py` executes **trusted explicit** argument-list commands with a total timeout, captures real outcomes and appends local evidence. Config v2 can define reviewed commands per workspace target and runs them from each target directory. `kstack-verify` gives review instructions.
+- **Remaining:** Build framework-specific verified check profiles, Playwright/BreakSwarm adapter, GUI screenshot capture, accessibility, native Swift/WPF/Flutter/React Native acceptance, broader failure/recovery coverage and reviewer isolation. Separate fresh tests from stale evidence. The current subprocess runner is **not sandboxed**.
 - **Blocker:** Browser/native SDKs and approved real project environments absent; arbitrary untrusted test execution is prohibited.
 - **Files:** `src/kstack/verification.py`, `evidence.py`, `project.py`, `skills/kstack-verify/SKILL.md`, `docs/ACCEPTANCE.md`.
 - **Actions:** Add user-approved command profiles, capability checks, artefact hashes and targeted adapters with explicit target authorisation; use genuine native devices/OS where required.
@@ -260,11 +260,11 @@
 ### KSK-602 — Package distribution, plugin and stable release
 
 - **Original:** 15.
-- **State:** PARTIAL. `pyproject.toml`, bundled assets, `plugin.json`, `.claude-plugin/plugin.json`, README and local package tests exist.
-- **Remaining:** Publish release artifacts with hashes/provenance, pin build tooling and reproduce builds; validate plugin marketplace/onboarding in actual hosts; run real install acceptance on packaged wheel and source checkout; formalise configuration schemas/version migrations and deprecation policy. Decide ownership/licence for third-party packages independently.
+- **State:** PARTIAL. `pyproject.toml`, bundled assets, `plugin.json`, `.claude-plugin/plugin.json`, README and local package tests exist. A wheel built successfully, installed in a temporary clean venv, included `monorepo.json`, and passed `kstack doctor`; the `kstack-weekly` entry point returned help successfully.
+- **Remaining:** Publish release artifacts with hashes/provenance, pin build tooling and reproduce builds; validate plugin marketplace/onboarding in actual hosts; exercise real install acceptance in authenticated hosts; formalise configuration schemas/version migrations and deprecation policy. Decide ownership/licence for third-party packages independently.
 - **Blocker:** Live provider plugin registration and signed release identity unavailable. GitHub Actions minutes exhausted.
 - **Files:** `pyproject.toml`, `plugin.json`, `.claude-plugin/plugin.json`, `README.md`, `CHANGELOG.md`, `docs/ARCHITECTURE.md`.
-- **Tests:** Wheel build/installation in clean venv, bundled skills/profile selection, CLI/weekly entry points, host plugin discovery and actual host invocation, checksum verification, clean uninstallation.
+- **Tests:** Wheel build and clean temporary venv install, bundled profile presence, CLI doctor and weekly entry point checked locally. Still test host plugin discovery and invocation, checksum delivery, clean uninstallation and reproducible artifact provenance.
 - **Acceptance:** A new user can install KStack from verified distribution and reproduce supported workflows without source modification.
 
 ### KSK-603 — Optional dashboard/observability
