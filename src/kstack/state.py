@@ -45,11 +45,13 @@ def lock_state(path: Path):
     lock; recovery requires manual inspection and removal.
     """
     lock = path / ".write-lock"
-    path.mkdir(parents=True, exist_ok=True)
+    path.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if os.name == "posix":
+        os.chmod(path, 0o700)
     if path.is_symlink() or lock.is_symlink():
         raise ValueError("State lock path cannot be a symlink")
     try:
-        lock.mkdir()
+        lock.mkdir(mode=0o700)
     except FileExistsError as exc:
         raise ValueError("KStack state is locked; inspect .write-lock before retrying") from exc
     try:

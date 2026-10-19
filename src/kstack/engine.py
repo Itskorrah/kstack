@@ -75,16 +75,26 @@ def analyse(content: str, policy: dict, repo: str, path: str, tree: list[dict], 
 
 
 def discover(api: GitHubAPI, watchlist: dict, state: Path, max_candidates: int = 50) -> dict:
-    """Scan pinned GitHub repo snapshots, not arbitrary user supplied URLs."""
+    """Pinned, round-robin watchlist discovery with bounded revision history.
+
+    The per-source round robin prevents a large first repository from starving
+    smaller repositories. Network/API errors remain explicit rather than being
+    treated as a healthy empty discovery result.
+    """
     if max_candidates < 1 or max_candidates > 250:
         raise ValueError("max_candidates must be 1..250")
     existing = read_json(state / "candidates.json", {})
+    previous_revisions = read_json(state / "candidate-revisions.json", {})
     changes = []
     errors = []
+    repositories = []
     for source in watchlist.get("sources", []):
-        repo = valid_repo(source["repository"])
-        roots = source.get("paths", ["skills/"])
         try:
+            repo = valid_repo(source["repository"])
+            roots = source.get("paths", ["skills/"])
+            if not isinstance(roots, list) or not roots or any(not isinstance(r, str) or
+                    not r.endswith("/") or r.startswith("/") or ".." in r for r in roots):
+                raise ValueError("Invalid skill scan prefix")
             info = api.repository(repo)
             if info.get("archived") or info.get("disabled"):
                 continue
@@ -93,24 +103,35 @@ def discover(api: GitHubAPI, watchlist: dict, state: Path, max_candidates: int =
             matches = sorted(x["path"] for x in tree if x.get("type") == "blob"
                              and x.get("path", "").endswith("/SKILL.md")
                              and any(x["path"].startswith(p) for p in roots))
-            for path in matches:
-                if len(changes) >= max_candidates:
-                    break
-                ident = candidate_id(repo, path)
-                previous = existing.get(ident, {})
-                if previous.get("commit") == commit:
-                    continue
-                # Content not trusted or executed. Candidates are immutable refs.
-                existing[ident] = {"id": ident, "repository": repo, "path": path,
-                                   "commit": commit, "status": "discovered", "discovered_at": stamp()}
-                changes.append(ident)
+            repositories.append((repo, commit, matches))
         except (ValueError, KeyError, RuntimeError) as exc:
-            errors.append({"repository": repo, "error": str(exc)[:200]})
-        if len(changes) >= max_candidates:
-            break
+            errors.append({"repository": source.get("repository", "unknown"), "error": str(exc)[:200]})
+    # Round-robin order ensures at least one candidate from each source when
+    # the limit permits; we never truncate one list and pretend it was complete.
+    index = 0
+    while len(changes) < max_candidates and any(index < len(paths) for _, _, paths in repositories):
+        for repo, commit, paths in repositories:
+            if index >= len(paths) or len(changes) >= max_candidates:
+                continue
+            path = paths[index]
+            ident = candidate_id(repo, path)
+            previous = existing.get(ident, {})
+            if previous.get("commit") == commit:
+                continue
+            if previous:
+                history = previous_revisions.setdefault(ident, [])
+                history.append({k: previous.get(k) for k in ("commit", "status", "content_sha256", "assessed_at")})
+                # Keep recent revision metadata; approved bytes are pinned in objects/.
+                previous_revisions[ident] = history[-20:]
+            existing[ident] = {"id": ident, "repository": repo, "path": path,
+                               "commit": commit, "status": "discovered", "discovered_at": stamp()}
+            changes.append(ident)
+        index += 1
     write_json(state / "candidates.json", existing)
+    write_json(state / "candidate-revisions.json", previous_revisions)
     write_json(state / "last-discovery.json", {"when": stamp(), "changed": changes, "errors": errors})
-    return {"changed": changes, "errors": errors, "total_known": len(existing)}
+    return {"changed": changes, "errors": errors, "total_known": len(existing),
+            "limit_reached": len(changes) >= max_candidates}
 
 
 def assess(api: GitHubAPI, policy: dict, state: Path, ident: str, current_names: set[str]) -> dict:
@@ -192,17 +213,15 @@ def promote(state: Path, policy: dict, ident: str, review: dict, autonomous: boo
     if item["name"] in existing_names:
         raise ValueError("Name collision with active skill")
     history = read_json(state / "history.json", [])
-    # Atomic manifest update, with a stored previous generation.
-    snapshots = state / "snapshots"
-    snapshots.mkdir(parents=True, exist_ok=True)
+    # Multiple-document transaction with an undo journal for crash recovery.
     version = len(history) + 1
-    write_json(snapshots / f"{version:06d}.json", active)
+    original_active = dict(active)
     active[ident] = {"name": item["name"], "repository": item["repository"], "path": item["path"],
                      "commit": item["commit"], "content_sha256": item["content_sha256"],
                      "promoted_at": stamp(), "reviewer": review["reviewer"]}
-    write_json(state / "active.json", active)
     history.append({"version": version, "when": stamp(), "action": "auto-promote" if autonomous else "promote", "id": ident})
-    write_json(state / "history.json", history)
+    from .transaction import commit_generation
+    commit_generation(state, active, history, version, original_active)
     return active[ident]
 
 
@@ -218,10 +237,9 @@ def rollback(state: Path, version: int) -> dict:
     current = read_json(state / "active.json", {})
     history = read_json(state / "history.json", [])
     next_number = len(history) + 1
-    write_json(state / "snapshots" / f"{next_number:06d}.json", current)
-    write_json(state / "active.json", previous)
     history.append({"version": next_number, "when": stamp(), "action": "rollback", "to_snapshot": version})
-    write_json(state / "history.json", history)
+    from .transaction import commit_generation
+    commit_generation(state, previous, history, next_number, current)
     return previous
 
 

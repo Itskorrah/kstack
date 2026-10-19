@@ -6,6 +6,7 @@ trusted project owner, never command strings originating from candidate skills.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import subprocess
 import time
@@ -38,18 +39,21 @@ def verify_project(project: Path, state: Path, *, timeout: int = 120, apply: boo
         try:
             run = subprocess.run(argv, cwd=project, env=safe, shell=False, capture_output=True,
                                  text=True, errors="replace", timeout=timeout, check=False)
-            item = {"argv": argv, "returncode": run.returncode, "status": "passed" if run.returncode == 0 else "failed",
+            item = {"executable": Path(argv[0]).name, "argv_sha256": hashlib.sha256(json.dumps(argv).encode()).hexdigest(), "argument_count": len(argv), "returncode": run.returncode, "status": "passed" if run.returncode == 0 else "failed",
                     "output_sha256": hashlib.sha256((run.stdout + run.stderr).encode()).hexdigest(),
-                    "output_excerpt": (run.stdout + run.stderr)[-1500:],
+                    "stdout_chars": len(run.stdout), "stderr_chars": len(run.stderr),
+                    "output_redacted": True,
                     "elapsed_seconds": round(time.monotonic() - started, 3)}
         except subprocess.TimeoutExpired:
-            item = {"argv": argv, "status": "timeout", "elapsed_seconds": round(time.monotonic()-started, 3)}
+            item = {"executable": Path(argv[0]).name, "argument_count": len(argv), "status": "timeout", "elapsed_seconds": round(time.monotonic()-started, 3)}
         except OSError as exc:
-            item = {"argv": argv, "status": "blocked", "error": type(exc).__name__}
+            item = {"executable": Path(argv[0]).name, "argument_count": len(argv), "status": "blocked", "error": type(exc).__name__}
         results.append(item)
         if item["status"] != "passed":
             break
-    answer = {"ok": len(results) == len(commands) and all(x["status"] == "passed" for x in results),
+    from .delivery import git_snapshot
+    snapshot = git_snapshot(project)
+    answer = {"git_snapshot": snapshot, "ok": len(results) == len(commands) and all(x["status"] == "passed" for x in results),
               "status": "verified" if len(results) == len(commands) and all(x["status"] == "passed" for x in results) else "incomplete",
               "project": str(project), "commands": results}
     append(state, "verification", answer)

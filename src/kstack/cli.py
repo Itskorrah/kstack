@@ -12,13 +12,19 @@ from .github_api import GitHubAPI
 from .installer import install, uninstall, doctor, bundled_skills, available_skills
 from .router import route
 from .state import app_state, read_json, lock_state
-from .project import inspect_project, bootstrap
+from .project import inspect_project, bootstrap, install_instructions
 from .verification import verify_project
 from .evidence import inspect as evidence_status
 from .external import install_package, list_external
+from .portfolio import export_lock, inspect_lock
+from .feedback import record as record_outcome, summary as outcome_summary
+from .hosts import inspect_host
+from .queue import queue as maintenance_queue
+from .scheduler import eligibility
+from .delivery import delivery_readiness
 
 ROOT = Path(__file__).resolve().parents[2]
-_MUTATORS = {"scan", "assess", "promote", "rollback", "install", "uninstall", "maintenance", "bootstrap", "verify-project", "external-install"}
+_MUTATORS = {"scan", "assess", "promote", "rollback", "install", "uninstall", "maintenance", "bootstrap", "verify-project", "external-install", "export-lock", "record-outcome"}
 
 
 def parser():
@@ -27,7 +33,7 @@ def parser():
     ap.add_argument("--root", type=Path, default=ROOT, help="KStack source checkout")
     sp = ap.add_subparsers(dest="command", required=True)
     for name in ("list", "status", "scan", "assess", "promote", "rollback", "install", "uninstall", "doctor", "route",
-                 "maintenance", "inspect-project", "bootstrap", "verify-project", "evidence", "external-install", "external-list"):
+                 "maintenance", "inspect-project", "bootstrap", "verify-project", "evidence", "external-install", "external-list", "export-lock", "inspect-lock", "host-status", "record-outcome", "outcomes", "queue", "schedule-status", "delivery-plan"):
         cmd = sp.add_parser(name)
         if name in {"scan", "maintenance"}:
             cmd.add_argument("--limit", type=int, default=30 if name == "maintenance" else 50)
@@ -38,7 +44,7 @@ def parser():
             cmd.add_argument("--autonomous", action="store_true")
         if name == "rollback":
             cmd.add_argument("snapshot", type=int)
-        if name in {"install", "uninstall", "doctor", "external-install", "external-list"}:
+        if name in {"install", "uninstall", "doctor", "external-install", "external-list", "host-status"}:
             cmd.add_argument("--host", choices=["codex", "claude"], required=name != "doctor")
             cmd.add_argument("--scope", choices=["project", "global"], default="global")
             cmd.add_argument("--project", type=Path)
@@ -60,8 +66,20 @@ def parser():
                 cmd.add_argument("--project", type=Path)
             else:
                 cmd.add_argument("--project", type=Path, required=True)
+        if name in ("export-lock", "inspect-lock"):
+            cmd.add_argument("--file", type=Path, required=True)
+            if name == "export-lock":
+                cmd.add_argument("--apply", action="store_true")
+        if name == "delivery-plan":
+            cmd.add_argument("--project", type=Path, required=True)
+            cmd.add_argument("--repository", required=True)
+            cmd.add_argument("--base", default="main")
+            cmd.add_argument("--authorised", action="store_true", help="Indicate explicit per-task delivery permission")
+        if name == "record-outcome":
+            cmd.add_argument("--file", type=Path, required=True, help="A locally authored outcome JSON record")
         if name == "bootstrap":
             cmd.add_argument("--apply", action="store_true")
+            cmd.add_argument("--instructions", action="store_true", help="Add managed AGENTS.md and CLAUDE.md sections")
         if name == "verify-project":
             cmd.add_argument("--run", action="store_true")
             cmd.add_argument("--timeout", type=int, default=120)
@@ -104,7 +122,10 @@ def command(args, root: Path, state: Path, api=None):
     if args.command == "inspect-project":
         return inspect_project(args.project)
     if args.command == "bootstrap":
-        return bootstrap(args.project, dry_run=not args.apply)
+        result = bootstrap(args.project, dry_run=not args.apply)
+        if args.instructions:
+            result["instructions"] = install_instructions(args.project, dry_run=not args.apply)
+        return result
     if args.command == "verify-project":
         return verify_project(args.project, state, timeout=args.timeout, apply=args.run)
     if args.command == "evidence":
@@ -114,6 +135,22 @@ def command(args, root: Path, state: Path, api=None):
                                dry_run=not args.apply, reviewed=args.reviewed, allow_code=args.allow_code)
     if args.command == "external-list":
         return list_external(args.host, args.scope, args.project)
+    if args.command == "host-status":
+        return inspect_host(root, state, args.host, args.scope, args.project)
+    if args.command == "export-lock":
+        return export_lock(state, args.file, dry_run=not args.apply)
+    if args.command == "inspect-lock":
+        return inspect_lock(args.file, state)
+    if args.command == "record-outcome":
+        return record_outcome(state, json.loads(args.file.read_text(encoding="utf-8")))
+    if args.command == "outcomes":
+        return outcome_summary(state)
+    if args.command == "queue":
+        return maintenance_queue(state)
+    if args.command == "schedule-status":
+        return eligibility(state)
+    if args.command == "delivery-plan":
+        return delivery_readiness(args.project, state, args.repository, args.base, args.authorised)
     if args.command == "maintenance":
         answer = {"discovery": discover(api or GitHubAPI(), watchlist, state, args.limit),
                   "assessed": [], "promoted": [], "blocked": []}
@@ -151,11 +188,14 @@ def main(argv=None, api=None):
             writing = False
         if args.command == "verify-project" and not args.run:
             writing = False
-        if args.command == "external-install" and not args.apply:
+        if args.command in ("external-install", "export-lock") and not args.apply:
             writing = False
         if args.command in ("install", "uninstall") and args.dry_run:
             writing = False
         with lock_state(state) if writing else nullcontext():
+            if writing:
+                from .transaction import recover
+                recover(state)
             answer = command(args, root, state, api)
         print(json.dumps(answer, indent=2, ensure_ascii=False, sort_keys=True))
         return 0 if not isinstance(answer, dict) or answer.get("ok", True) else 1

@@ -103,3 +103,51 @@ def bootstrap(project: Path, dry_run: bool = True) -> dict:
     if not dry_run:
         write_json(path, payload)
     return {**facts, "action": "would-create" if dry_run else "created", "configuration": payload}
+
+
+START = "<!-- KSTACK:START -->"
+END = "<!-- KSTACK:END -->"
+INSTRUCTIONS = ("<!-- KSTACK:START -->\n"
+                "## KStack developer workflow\n"
+                "For substantial development, load the installed `kstack-router` skill when available. "
+                "Select only relevant installed specialists; prefer Evolve when separately installed "
+                "and appropriate. Run actual project checks before claiming verification. "
+                "Respect existing repository instructions, permissions and security constraints; "
+                "do not infer that catalogue entries are installed or that a passing static check proves host acceptance.\n"
+                "<!-- KSTACK:END -->\n")
+
+
+def install_instructions(project: Path, *, dry_run: bool = True, hosts=("codex", "claude")) -> dict:
+    """Add a narrowly scoped, recognisable block, preserving all existing instructions.
+
+    Refuse malformed or ambiguous markers. Never delete text owned by users.
+    """
+    from .installer import atomic_text
+    directory = project.expanduser().resolve()
+    if not directory.is_dir():
+        raise ValueError("Project directory does not exist")
+    targets = {"codex": "AGENTS.md", "claude": "CLAUDE.md"}
+    changed = []
+    for host in hosts:
+        if host not in targets:
+            raise ValueError("Unsupported instruction host")
+        file = directory / targets[host]
+        if file.is_symlink():
+            raise ValueError("Refusing symlink instruction target")
+        original = file.read_text(encoding="utf-8") if file.is_file() else ""
+        if original.count(START) != original.count(END) or original.count(START) > 1:
+            raise ValueError("Malformed or duplicated KStack instruction markers")
+        if START in original:
+            first = original.index(START)
+            second = original.index(END)
+            if second < first:
+                raise ValueError("Reversed managed instruction markers")
+            expected = original[:first] + INSTRUCTIONS.rstrip("\n") + original[second + len(END):]
+        else:
+            expected = original.rstrip("\n") + ("\n\n" if original.strip() else "") + INSTRUCTIONS
+        action = "unchanged" if original == expected else "would-write" if dry_run else "updated"
+        changed.append({"host": host, "file": str(file), "action": action})
+        if not dry_run and original != expected:
+            atomic_text(file, expected)
+    return {"changes": changed, "dry_run": dry_run,
+            "note": "Instructions refer to installed skills; real agent activation still requires host acceptance."}

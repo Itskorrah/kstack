@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kstack-devstack"
-version = "0.1.0"
+version = "0.2.0"
 description = "A local-first, evidence-driven skill catalogue and installer for coding agents"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -14,6 +14,7 @@ keywords = ["agents", "skills", "developer-tools", "codex", "claude"]
 
 [project.scripts]
 kstack = "kstack.cli:main"
+kstack-weekly = "kstack.weekly:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

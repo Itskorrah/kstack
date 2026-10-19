@@ -183,3 +183,13 @@ class NewFeatureTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(json.loads(buf.getvalue())["action"], "created")
         self.assertFalse((self.state / ".write-lock").exists())
+
+    def test_verification_never_persists_raw_output(self):
+        from kstack.verification import verify_project
+        secret = 'DUMMY_TEST_SECRET_DO_NOT_STORE'
+        config = {"verification_commands": [[sys.executable, "-c", f"print({secret!r})"]]}
+        (self.project / "kstack.json").write_text(json.dumps(config))
+        answer = verify_project(self.project, self.state, apply=True)
+        self.assertTrue(answer["ok"])
+        self.assertTrue(answer["commands"][0]["output_redacted"])
+        self.assertNotIn(secret, (self.state / "evidence.json").read_text())
