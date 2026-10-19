@@ -31,3 +31,11 @@ Evidence rule: **implemented** means code is present; **local-verified** means a
 - A test suite passing on Linux does not imply Windows/macOS acceptance.
 
 See `CODEX_TODO.md` for prioritised remaining work, exact files, dependencies, blocked acceptance environments and test criteria.
+
+## 20 October 2026 — verification revision-binding checkpoint
+
+- **Branch:** fix/verification-revision-stability-20261020, based on main b6924a1d29d07bd15325dbf666984ccb1e7c0450.
+- **Implemented (not suite-verified):** verify_project now snapshots Git state before and after checks. A passing command is not labelled verified if commit, branch, clean status or Git availability changed during its execution. Both snapshots, revision_stable and checks_passed are included in the JSON evidence. Missing-tool and timeout receipts now include argv_sha256 and elapsed_seconds without logging raw argv or output.
+- **Tests written but not run:** tests/test_verification_revision_stability.py (5 tests), covering unchanged revision, dirty working tree, changed HEAD, missing executable and timeout.
+- **Blocker:** Chat-mode environment cannot resolve github.com to obtain a complete checkout; GitHub Actions allocation unavailable. GitHub source updates/readback are not runtime tests.
+- **Gate:** On an actual checkout run PYTHONPATH=src python -m unittest discover -s tests -v; python -m compileall -q src/kstack scripts tests; python scripts/kstack.py doctor; python scripts/kstack.py schedule-status; repair failures. A successful Git check cannot certify OS-level isolation or no file modification between snapshots.
