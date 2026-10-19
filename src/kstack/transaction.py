@@ -15,6 +15,7 @@ import shutil
 import stat
 import tempfile
 import uuid
+import unicodedata
 from pathlib import Path
 from .state import file_lock, read_json, write_json
 from .security import is_link_or_junction, is_safe_relative_path
@@ -49,6 +50,13 @@ def _sync_directory(path: Path) -> None:
         # Some filesystems do not support directory fsync. File contents and
         # atomic replacement are still used; this limitation is platform-specific.
         pass
+
+
+def _host_path_key(relative: str) -> str:
+    """Conservative portable name comparison for case/Unicode collisions."""
+    if not isinstance(relative, str):
+        raise ValueError("Invalid relative host path")
+    return unicodedata.normalize("NFC", relative).casefold()
 
 
 def _safe_host_path(root: Path, relative: str) -> Path:
@@ -125,6 +133,9 @@ def commit_host_files(root: Path, changes: dict[str, bytes | str | None], *,
     root = Path(root)
     if is_link_or_junction(root):
         raise ValueError("Host skill directory cannot be a symlink")
+    names = [_host_path_key(path) for path in changes]
+    if len(names) != len(set(names)):
+        raise ValueError("Case-insensitive or Unicode-normalised host path collision")
     root.mkdir(parents=True, exist_ok=True)
     journal = root / HOST_JOURNAL
     if is_link_or_junction(journal) or journal.exists():
