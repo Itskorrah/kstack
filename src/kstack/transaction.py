@@ -217,6 +217,8 @@ def commit_host_files(root: Path, changes: dict[str, bytes | str | None], *,
 def recover_host_files(root: Path) -> dict:
     """Roll an interrupted host generation back after validating every path/hash."""
     root = Path(root)
+    if is_link_or_junction(root):
+        raise ValueError("Host skill directory cannot be a symlink")
     journal = root / HOST_JOURNAL
     if is_link_or_junction(journal):
         raise ValueError("Refusing symlink host transaction journal")
