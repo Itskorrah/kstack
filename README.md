@@ -1,6 +1,6 @@
 <div align="center">
 
-# KStack
+# kstack
 
 **A reproducible, evidence-driven developer stack for coding agents.**
 
