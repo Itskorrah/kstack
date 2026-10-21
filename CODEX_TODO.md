@@ -297,10 +297,19 @@
 
 **No future task in this file should be labelled complete until its objective acceptance criteria have genuinely been met.**
 
-## 20 October 2026 update — KSK-303 / KSK-503 Git revision binding
+## 21 October 2026 update — PR #5 verified; PR #6 revision binding
 
-- **Classification:** P1 partially implemented, environment-blocked runtime verification. A new draft branch fix/verification-revision-stability-20261020 (starting main b6924a1d29d07bd15325dbf666984ccb1e7c0450) adds before/after revision consistency to verify_project. Timeout/missing-tool receipts contain argv hashes/duration, not secret-bearing raw command arguments.
-- **Files:** src/kstack/verification.py; tests/test_verification_revision_stability.py; IMPLEMENTATION_STATUS.md.
-- **Evidence:** Remote source diff and GitHub readback only; tests written but **not run**. Direct Git clone blocked by DNS; no hosted Actions attempted.
-- **Resume:** git fetch origin; git switch fix/verification-revision-stability-20261020; PYTHONPATH=src python -m unittest discover -s tests -v; python -m compileall -q src/kstack scripts tests; python scripts/kstack.py doctor; python scripts/kstack.py schedule-status.
-- **Acceptance:** Five new tests and existing suite pass; a check that changes HEAD or clean state cannot produce successful verification or qualify for delivery readiness; unchanged Git and non-Git projects preserve expected behaviour. Distinguish this implemented source guard from stronger signed evidence, secure execution and live delivery adapters, which remain outside this slice.
+### KSK-101 / KSK-103 — PR #5
+
+- **State:** The recovery preflight and portable case/Unicode path-collision checks are merged into `main` at `034e191f9771c0b895b452a4ae31adefa142f6e3`.
+- **Additional fix found during Windows verification:** State-lock metadata is read through the descriptor holding the Windows byte-range lock. Windows' invalid-process-ID result is treated as confirmed process absence. Installer tests compare native paths and skip symlink setup when Windows denies the required privilege.
+- **Evidence:** On Windows with Python 3.13, 114 tests passed and 8 platform-dependent tests skipped; compileall, `doctor`, `schedule-status`, and `git diff --check` passed. Hosted Actions were not used.
+- **Residual acceptance:** Native macOS and other host integrations remain unverified. Recovery preflights all entries but still replaces files one at a time; filesystem races and interruption during the recovery writes can require another recovery attempt.
+
+### KSK-303 / KSK-503 — PR #6
+
+- **State:** The verifier now compares before/after Git revision, branch, cleanliness, and a digest of the index, tracked changes, and non-ignored untracked file contents. It stores the digest rather than raw diffs. A dirty baseline can still verify when unchanged; changed or unavailable Git fingerprints produce an incomplete result.
+- **Files:** `src/kstack/verification.py`, `src/kstack/delivery.py`, `tests/test_verification_revision_stability.py`, `README.md`, `docs/ARCHITECTURE.md`, `docs/SECURITY.md`.
+- **Evidence:** Eight focused PR #6 regression tests passed locally. The combined full-suite and CLI checks are the remaining gate before merging PR #6.
+- **Residual limits:** Ignored files are outside the Git fingerprint. Modified submodules and special files are treated as uninspectable; transient edits restored before the final snapshot cannot be detected. Git checks do not sandbox trusted verification commands or prove that commands exercised the intended behavior.
+- **Resume:** Fetch `main`, run `PYTHONPATH=src python -m unittest discover -s tests -v`, `python -m compileall -q src/kstack scripts tests`, `python scripts/kstack.py doctor`, and `python scripts/kstack.py schedule-status`; repair failures and update both status files before merging.

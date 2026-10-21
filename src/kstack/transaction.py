@@ -15,6 +15,7 @@ import shutil
 import stat
 import tempfile
 import uuid
+import unicodedata
 from pathlib import Path
 from .state import file_lock, read_json, write_json
 from .security import is_link_or_junction, is_safe_relative_path
@@ -49,6 +50,13 @@ def _sync_directory(path: Path) -> None:
         # Some filesystems do not support directory fsync. File contents and
         # atomic replacement are still used; this limitation is platform-specific.
         pass
+
+
+def _host_path_key(relative: str) -> str:
+    """Conservative portable name comparison for case/Unicode collisions."""
+    if not isinstance(relative, str):
+        raise ValueError("Invalid relative host path")
+    return unicodedata.normalize("NFC", relative).casefold()
 
 
 def _safe_host_path(root: Path, relative: str) -> Path:
@@ -125,6 +133,9 @@ def commit_host_files(root: Path, changes: dict[str, bytes | str | None], *,
     root = Path(root)
     if is_link_or_junction(root):
         raise ValueError("Host skill directory cannot be a symlink")
+    names = [_host_path_key(path) for path in changes]
+    if len(names) != len(set(names)):
+        raise ValueError("Case-insensitive or Unicode-normalised host path collision")
     root.mkdir(parents=True, exist_ok=True)
     journal = root / HOST_JOURNAL
     if is_link_or_junction(journal) or journal.exists():
@@ -206,6 +217,8 @@ def commit_host_files(root: Path, changes: dict[str, bytes | str | None], *,
 def recover_host_files(root: Path) -> dict:
     """Roll an interrupted host generation back after validating every path/hash."""
     root = Path(root)
+    if is_link_or_junction(root):
+        raise ValueError("Host skill directory cannot be a symlink")
     journal = root / HOST_JOURNAL
     if is_link_or_junction(journal):
         raise ValueError("Refusing symlink host transaction journal")
@@ -227,7 +240,11 @@ def recover_host_files(root: Path) -> dict:
             or generation != stage_name[len(STAGE_PREFIX):]):
         raise ValueError("Invalid interrupted host generation identifier")
     entries = record["entries"]
-    seen = set()
+    # Validate the entire pending generation before rolling back even one file.
+    # Otherwise a late conflicting user edit or missing backup can leave a
+    # partially recovered installation after the function raises an error.
+    preflight_names = set()
+    validated = []
     for entry in entries:
         if not isinstance(entry, dict) or set(entry) != {"path", "old_sha256", "old_mode", "new_sha256"}:
             raise ValueError("Invalid host transaction entry")
@@ -238,13 +255,30 @@ def recover_host_files(root: Path) -> dict:
                 or (entry["old_mode"] is not None and
                     (type(entry["old_mode"]) is not int or not 0 <= entry["old_mode"] <= 0o7777))):
             raise ValueError("Invalid host transaction hash or mode")
-        if relative in seen:
-            raise ValueError("Duplicate host transaction path")
-        seen.add(relative)
+        portable_name = _host_path_key(relative)
+        if portable_name in preflight_names:
+            raise ValueError("Duplicate or case-insensitive host transaction path")
+        preflight_names.add(portable_name)
         target = _safe_host_path(root, relative)
         current = _sha_file(target)
         if current not in (entry["old_sha256"], entry["new_sha256"]):
             raise ValueError(f"Host file changed after interruption; manual recovery required: {relative}")
+        if entry["old_sha256"] is not None and current != entry["old_sha256"]:
+            backup = _safe_host_path(stage, "backup/" + relative)
+            if _sha_file(backup) != entry["old_sha256"]:
+                raise ValueError(f"Host transaction backup is missing or corrupt: {relative}")
+        validated.append((entry, current))
+    if generation is not None:
+        snapshot = _safe_host_path(root, ".kstack-generations/" + generation)
+        if is_link_or_junction(snapshot):
+            raise ValueError("Refusing symlink interrupted host generation")
+
+    for entry, inspected_sha in validated:
+        relative = entry["path"]
+        target = _safe_host_path(root, relative)
+        current = _sha_file(target)
+        if current != inspected_sha:
+            raise ValueError(f"Host file changed during recovery; manual recovery required: {relative}")
         old_hash = entry["old_sha256"]
         if old_hash is None:
             if current is not None:
