@@ -120,6 +120,36 @@ class HostTransactionFailureMatrixTests(unittest.TestCase):
             self.assertFalse((root / (STAGE_PREFIX + "c" * 32)).exists())
             self.assertFalse((root / ".kstack-generations" / ("c" * 32)).exists())
 
+    def test_staging_backup_and_new_file_failures_leave_host_unchanged(self):
+        for area in ("backup", "new"):
+            for timing in ("before", "after"):
+                with self.subTest(area=area, timing=timing):
+                    with tempfile.TemporaryDirectory() as directory:
+                        root = Path(directory) / "host"
+                        self._initial_host(root)
+                        stage = root / (STAGE_PREFIX + "d" * 32)
+                        original_write = transaction._write_staged
+                        failed = {"once": False}
+
+                        def fail_staging_write(path, data):
+                            selected = (Path(path) == stage / area / "skills/a.txt")
+                            if selected and not failed["once"]:
+                                failed["once"] = True
+                                if timing == "after":
+                                    original_write(path, data)
+                                raise OSError("injected staging write failure")
+                            return original_write(path, data)
+
+                        with patch.object(transaction, "_write_staged", side_effect=fail_staging_write):
+                            with self.assertRaisesRegex(OSError, "staging write"):
+                                commit_host_files(root, {"skills/a.txt": b"new-a"},
+                                                  generation="d" * 32, retain_backup=True)
+                        self.assertTrue(failed["once"])
+                        self.assertEqual((root / "skills/a.txt").read_bytes(), b"old-a")
+                        self.assertFalse((root / HOST_JOURNAL).exists())
+                        self.assertFalse(stage.exists())
+                        self.assertFalse((root / ".kstack-generations" / ("d" * 32)).exists())
+
 
 if __name__ == "__main__":
     unittest.main()
