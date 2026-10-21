@@ -45,10 +45,41 @@ import errno
 
 def _read_lock_record(lock: Path) -> dict:
     try:
-        value = json.loads(lock.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, UnicodeError):
+        return _decode_lock_record(lock.read_bytes())
+    except OSError:
+        return {}
+
+
+def _decode_lock_record(payload: bytes) -> dict:
+    try:
+        value = json.loads(payload.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeError):
         return {}
     return value if isinstance(value, dict) else {}
+
+
+def _read_lock_bytes_fd(fd: int) -> bytes:
+    """Read a lock record through its already-open descriptor.
+
+    Windows byte-range locks can prevent a second handle from reading the
+    locked byte. Using the descriptor that owns the lock avoids that conflict.
+    """
+    os.lseek(fd, 0, os.SEEK_SET)
+    chunks = []
+    while True:
+        chunk = os.read(fd, 65536)
+        if not chunk:
+            break
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def _read_lock_record_fd(fd: int) -> dict:
+    payload = _read_lock_bytes_fd(fd)
+    if os.name == "nt" and payload == b"\0":
+        # _acquire_os_lock creates this byte so Windows can lock an empty file.
+        return {}
+    return _decode_lock_record(payload)
 
 
 def _acquire_os_lock(fd: int, *, nonblocking: bool = True) -> None:
@@ -127,8 +158,9 @@ def file_lock(lock: Path):
             if isinstance(owner.get("pid"), int):
                 detail = f" (pid {owner['pid']} on {owner.get('hostname', 'unknown host')})"
             raise ValueError(f"KStack state is locked{detail}; inspect the lock owner before retrying") from exc
-        if os.fstat(fd).st_size:
-            owner = _read_lock_record(lock)
+        existing = _read_lock_bytes_fd(fd)
+        if existing and not (os.name == "nt" and existing == b"\0"):
+            owner = _decode_lock_record(existing)
             if not {"pid", "hostname", "started_at", "locked"} <= set(owner) or type(owner.get("pid")) is not int:
                 raise ValueError(f"Refusing to overwrite an unowned lock file: {lock}")
         owner = {"pid": os.getpid(), "hostname": socket.gethostname(),
@@ -166,7 +198,12 @@ def _process_alive(pid: int) -> bool | None:
         return False
     except PermissionError:
         return True
-    except OSError:
+    except OSError as exc:
+        # On Windows, os.kill(pid, 0) reports ERROR_INVALID_PARAMETER (87)
+        # when the PID does not identify a process. Treat that as confirmed
+        # absence so stale-owner recovery works consistently across platforms.
+        if os.name == "nt" and getattr(exc, "winerror", None) == 87:
+            return False
         return None
 
 
@@ -202,7 +239,7 @@ def lock_status(path: Path) -> dict:
             acquired = True
         except BlockingIOError:
             return {"locked": True, "owner": _read_lock_record(lock), "stale_owner": False}
-        owner = _read_lock_record(lock)
+        owner = _read_lock_record_fd(fd)
         same_host = owner.get("hostname") == socket.gethostname()
         pid = owner.get("pid")
         alive = _process_alive(pid) if type(pid) is int and same_host else None
@@ -241,7 +278,7 @@ def recover_stale_lock(path: Path, expected_pid: int) -> dict:
         except BlockingIOError as exc:
             owner = _read_lock_record(lock)
             raise ValueError(f"State lock is still held by pid {owner.get('pid', 'unknown')}") from exc
-        owner = _read_lock_record(lock)
+        owner = _read_lock_record_fd(fd)
         if type(expected_pid) is not int or owner.get("pid") != expected_pid:
             raise ValueError("Owner PID does not match the recorded state lock")
         if owner.get("locked") is not True:
