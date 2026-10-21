@@ -75,6 +75,8 @@ python scripts/kstack.py verify-project --project /path/to/app --run --timeout 1
 
 The first command previews configured checks. The second runs them. This runner is not a security sandbox.
 
+For Git projects, verification records before-and-after revision and worktree fingerprints. It stores a digest of tracked changes and non-ignored untracked files, not their contents. A changed or unavailable Git fingerprint leaves the result incomplete, even when every command passes. Ignored files are outside this check; non-Git projects remain supported without revision binding.
+
 ## Capabilities
 
 - **Project setup:** Inspect known manifests, identify declared workspaces, and create a project profile or managed instruction sections while preserving existing content.

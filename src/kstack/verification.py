@@ -31,6 +31,8 @@ def verify_project(project: Path, state: Path, *, timeout: int = 120, apply: boo
         return {"ok": False, "status": "dry_run",
                 "commands": [{"working_directory": relative, "argv": argv} for relative, argv in plan],
                 "message": "No commands executed; pass --run to execute trusted commands"}
+    from .delivery import git_snapshot
+    before_snapshot = git_snapshot(project)
     results = []
     # Restrict environment to common process essentials. This does not prevent
     # commands themselves from reading files; project commands must be trusted.
@@ -44,8 +46,9 @@ def verify_project(project: Path, state: Path, *, timeout: int = 120, apply: boo
             started = time.monotonic()
             remaining = min(timeout, deadline - started)
             if remaining <= 0:
-                item = {"executable": Path(argv[0]).name, "argument_count": len(argv),
-                        "working_directory": relative, "status": "timeout", "elapsed_seconds": 0}
+                item = {"executable": Path(argv[0]).name, "argv_sha256": hashlib.sha256(json.dumps(argv).encode()).hexdigest(),
+                        "argument_count": len(argv), "working_directory": relative,
+                        "status": "timeout", "elapsed_seconds": 0}
                 results.append(item)
                 break
             try:
@@ -57,20 +60,35 @@ def verify_project(project: Path, state: Path, *, timeout: int = 120, apply: boo
                         "working_directory": relative, "output_redacted": True,
                         "elapsed_seconds": round(time.monotonic() - started, 3)}
             except subprocess.TimeoutExpired:
-                item = {"executable": Path(argv[0]).name, "argument_count": len(argv),
-                        "working_directory": relative, "status": "timeout", "elapsed_seconds": round(time.monotonic()-started, 3)}
+                item = {"executable": Path(argv[0]).name, "argv_sha256": hashlib.sha256(json.dumps(argv).encode()).hexdigest(),
+                        "argument_count": len(argv), "working_directory": relative,
+                        "status": "timeout", "elapsed_seconds": round(time.monotonic()-started, 3)}
             except OSError as exc:
-                item = {"executable": Path(argv[0]).name, "argument_count": len(argv),
-                        "working_directory": relative, "status": "blocked", "error": type(exc).__name__}
+                item = {"executable": Path(argv[0]).name, "argv_sha256": hashlib.sha256(json.dumps(argv).encode()).hexdigest(),
+                        "argument_count": len(argv), "working_directory": relative,
+                        "status": "blocked", "error": type(exc).__name__,
+                        "elapsed_seconds": round(time.monotonic()-started, 3)}
             results.append(item)
             if item["status"] != "passed":
                 break
         if results and results[-1]["status"] != "passed":
             break
-    from .delivery import git_snapshot
     snapshot = git_snapshot(project)
-    answer = {"git_snapshot": snapshot, "ok": len(results) == len(plan) and all(x["status"] == "passed" for x in results),
-              "status": "verified" if len(results) == len(plan) and all(x["status"] == "passed" for x in results) else "incomplete",
+    revision_stable = all(
+        before_snapshot[field] == snapshot[field]
+        for field in ("commit", "branch", "clean", "git_available")
+    )
+    if (before_snapshot.get("git_available") or snapshot.get("git_available")
+            or before_snapshot.get("worktree_sha256") is not None
+            or snapshot.get("worktree_sha256") is not None):
+        before_tree = before_snapshot.get("worktree_sha256")
+        after_tree = snapshot.get("worktree_sha256")
+        revision_stable = revision_stable and before_tree is not None and before_tree == after_tree
+    checks_passed = len(results) == len(plan) and all(item["status"] == "passed" for item in results)
+    passed = checks_passed and revision_stable
+    answer = {"git_snapshot": snapshot, "pre_verification_git_snapshot": before_snapshot,
+              "revision_stable": revision_stable, "checks_passed": checks_passed,
+              "ok": passed, "status": "verified" if passed else "incomplete",
               "project": str(project), "commands": results}
     append(state, "verification", answer)
     return answer

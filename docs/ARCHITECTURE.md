@@ -33,7 +33,7 @@ flowchart TD
 | `installer.py` | Managed, conflict-aware host skill generations, integrity checks, explicit recovery and retained rollback | A coding host loaded or obeyed the installed skill |
 | `hosts.py` | Host executable visibility, local installation status | Authenticated host session acceptance |
 | `portfolio.py` | Export approved immutable source records; inspect against cached objects | Automatically trusted cross-machine import or signed provenance |
-| `verification.py` | Bounded explicit subprocess tests and current local Git snapshot, declared by trusted project owner | Sandbox safety or broader test coverage without configured commands |
+| `verification.py` | Bounded explicit subprocess tests, before/after Git snapshots and a digest of Git-visible changed-file contents | Sandbox safety, ignored-file integrity or broader test coverage without configured commands |
 | `delivery.py` | Advisory preflight binding authorised delivery to a clean Git commit and fresh successful test evidence | GitHub branch/PR creation, merge or authenticated remote-state checks |
 | `evidence.py` | Hash-linked local journal and corruption detection | Signed independent evaluation evidence |
 | `feedback.py` | Honest self-reported outcome metadata and counts | Causal effectiveness improvements |
@@ -69,6 +69,8 @@ Bundled KStack skills live under `skills/` and are mirrored into `src/kstack/bun
 External integration catalogue entries are metadata, not installed tools. KStack's optional `kstack-package.json` format 1 extension declares sibling skills with `name`, `path`, `version`, optional versioned `dependencies`, and optional `provides` capability IDs. Resolution checks missing/incompatible/cyclic dependencies, duplicate names or capabilities, path escapes and tracked-file hashes before any write. This format is a KStack extension, not an upstream standard. No upstream scripts execute during installation. Full packages with code require deliberate trust review and an explicit copy permission. The actual agent host determines whether skill discovery, scripts and provider integrations are available.
 
 Project inspection recognises declared npm, pnpm and Cargo workspace patterns within bounded limits and reports per-target technologies. Verification suggestions are advisory. Config v2 can explicitly store `verification_targets`, each containing a project-relative `path` and argument-list `commands`; the owner must review these commands before `verify-project --run` executes them from the target directory. Bootstrap never copies inferred commands into trusted configuration.
+
+For Git projects, verification records snapshots before and after the configured commands. The snapshot binds the commit, branch, cleanliness, and a SHA-256 fingerprint of the Git index, tracked changes, and non-ignored untracked files. Only the digest is stored; raw diffs and test output are not. If the Git state changes or a complete fingerprint is unavailable, passing commands still produce an incomplete result. This does not detect changes to ignored files or transient edits that are fully restored before the final snapshot; modified submodules and special files are treated as uninspectable. Non-Git project behavior remains supported, but those checks have no revision binding.
 
 Routing accepts a host and scope to inspect installed bundled workflow files and external capability manifests. Results distinguish `available-not-installed` from `installed-files-unverified`; neither establishes host invocation.
 
