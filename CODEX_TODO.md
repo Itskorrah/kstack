@@ -135,12 +135,12 @@
 ### KSK-301 — Semantic capability matching and measured router quality
 
 - **Original:** 05, 10, 14.
-- **State:** PARTIAL. `router.py` provides deterministic project-aware task/risk classification and now distinguishes available bundled workflows from files installed in the selected host scope. It checks external package capabilities and reports installed files as unverified by the host.
-- **Remaining:** Add semantic intent classification, ambiguity/conflict handling, host-provided skill availability and confidence/provenance reporting. The on-disk capability registry cannot prove implicit invocation or actual skill behavior. Explicitly favour one lead orchestrator and minimal specialist overhead.
+- **State:** PARTIAL. `router.py` provides deterministic project-aware task/risk classification and distinguishes available bundled workflows from files installed in the selected host scope. Specialist recommendations now require an explicit task signal; project profiles only refine a matching signal. Security and database migration terms reach pstack. A six-case synthetic contract suite checks workflow, risk, complexity and specialist recommendations; its fixtures were authored alongside the routing change and are not an independent holdout.
+- **Remaining:** Add an independently sourced task corpus and comparative baseline, semantic intent and ambiguity/conflict handling, host-provided skill availability, and confidence/provenance reporting. The on-disk capability registry cannot prove implicit invocation or actual skill behavior. Explicitly favour one lead orchestrator and minimal specialist overhead.
 - **Blocker:** No live coding-host agent API or real implicit invocation test environment.
 - **Files:** `src/kstack/router.py`, `project.py`, `hosts.py`, `external.py`, `data/integrations.json`.
-- **Actions:** Add host-supplied availability evidence, deterministic fallback with explicit uncertainty, optional model-assisted reasoning, positive/negative routing fixtures from Jotstead/BreakSwarm/Clicky Bro and task-aware evaluation metrics.
-- **Tests:** Cases where keyword-only router fails, trivial edits, mixed frameworks, specialist missing, credential-sensitive actions, duplicate skills, unstable host availability.
+- **Actions:** Add host-supplied availability evidence, deterministic fallback with explicit uncertainty, optional model-assisted reasoning, independently authored positive/negative routing fixtures and task-aware evaluation metrics.
+- **Tests:** `tests/fixtures/routing_regression.json` and `scripts/route_benchmark.py` cover UI accessibility, backend API, browser regression, frontend performance, security review and database migration. Add independently sourced cases for keyword-only failures, trivial edits, mixed frameworks, missing specialists, credential-sensitive actions, duplicate skills and unstable host availability.
 - **Acceptance:** Routing recommendations select relevant **installed** capabilities, do not imply a host invoked them, and materially improve acceptance outcomes against a documented baseline.
 
 ### KSK-302 — Bounded host-aware multi-agent coordination
@@ -297,7 +297,7 @@
 
 **No future task in this file should be labelled complete until its objective acceptance criteria have genuinely been met.**
 
-## 21 October 2026 update — PR #5 verified; PR #6 revision binding
+## 21 October 2026 update — PR #5/#6 merged; routing regression slice
 
 ### KSK-101 / KSK-103 — PR #5
 
@@ -310,6 +310,7 @@
 
 - **State:** The verifier now compares before/after Git revision, branch, cleanliness, and a digest of the index, tracked changes, and non-ignored untracked file contents. It stores the digest rather than raw diffs. A dirty baseline can still verify when unchanged; changed or unavailable Git fingerprints produce an incomplete result.
 - **Files:** `src/kstack/verification.py`, `src/kstack/delivery.py`, `tests/test_verification_revision_stability.py`, `README.md`, `docs/ARCHITECTURE.md`, `docs/SECURITY.md`.
-- **Evidence:** All nine PR #6 regression tests passed in the combined 123-test suite on Windows with Python 3.13. Compileall, `doctor`, `schedule-status`, and `git diff --check` passed. PR #6 is ready for merge after the final remote head check.
+- **Evidence:** All nine PR #6 regression tests passed in the combined 123-test suite on Windows with Python 3.13. PR #6 merged into `main` at `d9c21a274b1d231cc8315bbe13b1228321ba93d8`. Compileall, `doctor`, `schedule-status`, and `git diff --check` passed. Hosted Actions were not used.
 - **Residual limits:** Ignored files are outside the Git fingerprint. Modified submodules and special files are treated as uninspectable; transient edits restored before the final snapshot cannot be detected. Git checks do not sandbox trusted verification commands or prove that commands exercised the intended behavior.
-- **Resume:** Continue with KSK-101 through KSK-104 acceptance gaps and the P1 routing/integration tasks; see their individual blockers and acceptance criteria above.
+- **KSK-301 routing slice:** Specialist candidates now need explicit task-language matches; a web project profile alone no longer suggests BreakSwarm. Added authentication, authorization, permissions, secret, database and migration signals for pstack. `python scripts/route_benchmark.py` reports 6/6 synthetic regression contracts, with workflow recall, required-specialist recall and candidate precision at 1.0. This suite was created with the fix, so it is not an independent or live-host benchmark. Windows Python 3.13 full suite: 124 passed, 8 skipped. Compileall, `doctor`, `schedule-status`, and `git diff --check` passed. Live host invocation remains unverified.
+- **Resume:** Build a separately sourced routing corpus before claiming comparative quality; then prioritize the next achievable P0 lifecycle/security slice while scheduling native-host acceptance when those environments are available.

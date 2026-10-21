@@ -1,0 +1,66 @@
+{
+  "format": 1,
+  "description": "Synthetic routing regression contracts for deterministic workflow and specialist routing. These fixtures check recommendations only; they are not an independent holdout and do not establish installation or host invocation.",
+  "cases": [
+    {
+      "id": "ui-accessibility",
+      "task": "Improve the React settings UI's keyboard accessibility and visual contrast",
+      "profile": "web",
+      "risk": "ordinary",
+      "complexity": "substantial",
+      "required_workflows": ["kstack-router", "kstack-verify"],
+      "required_specialists": ["evolve", "ui-skills", "vercel-react"],
+      "allowed_specialists": ["evolve", "ui-skills", "vercel-react"]
+    },
+    {
+      "id": "backend-api",
+      "task": "Build and regression-test a FastAPI endpoint for cursor-based pagination",
+      "profile": "python",
+      "risk": "ordinary",
+      "complexity": "substantial",
+      "required_workflows": ["kstack-router", "kstack-verify"],
+      "required_specialists": ["superpowers"],
+      "allowed_specialists": ["superpowers"]
+    },
+    {
+      "id": "browser-regression",
+      "task": "Debug a flaky browser checkout flow and add a Playwright regression test",
+      "profile": "general",
+      "risk": "ordinary",
+      "complexity": "substantial",
+      "required_workflows": ["kstack-router", "kstack-verify"],
+      "required_specialists": ["superpowers", "breakswarm"],
+      "allowed_specialists": ["superpowers", "breakswarm"]
+    },
+    {
+      "id": "frontend-performance",
+      "task": "Benchmark slow React rendering and profile list updates",
+      "profile": "web",
+      "risk": "ordinary",
+      "complexity": "substantial",
+      "required_workflows": ["kstack-router", "kstack-verify"],
+      "required_specialists": ["vercel-react"],
+      "allowed_specialists": ["vercel-react"]
+    },
+    {
+      "id": "security-review",
+      "task": "Audit authentication permissions and secret handling before production",
+      "profile": "general",
+      "risk": "elevated",
+      "complexity": "substantial",
+      "required_workflows": ["kstack-router", "kstack-audit", "kstack-verify"],
+      "required_specialists": ["evolve", "pstack"],
+      "allowed_specialists": ["evolve", "pstack"]
+    },
+    {
+      "id": "database-migration",
+      "task": "Review database migration blast radius and verify rollback and backfill behavior",
+      "profile": "general",
+      "risk": "elevated",
+      "complexity": "substantial",
+      "required_workflows": ["kstack-router", "kstack-audit", "kstack-verify"],
+      "required_specialists": ["pstack"],
+      "allowed_specialists": ["pstack"]
+    }
+  ]
+}

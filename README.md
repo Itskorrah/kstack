@@ -80,7 +80,7 @@ For Git projects, verification records before-and-after revision and worktree fi
 ## Capabilities
 
 - **Project setup:** Inspect known manifests, identify declared workspaces, and create a project profile or managed instruction sections while preserving existing content.
-- **Task routing:** Recommend relevant bundled workflows using task and project signals. Routing is deterministic metadata-based guidance, not model-driven reasoning or host invocation.
+- **Task routing:** Recommend relevant bundled workflows from task signals; project profiles can refine a specialist match but cannot create one. Routing is deterministic metadata-based guidance, not model-driven reasoning or host invocation.
 - **Skill management:** Install, uninstall, inspect, recover, and roll back kstack-managed skill files for Codex and Claude Code.
 - **External packages:** Copy manually reviewed skills from a clean, commit-pinned Git checkout. Verify installed-file integrity and declared sibling dependencies; refuse to overwrite unowned files.
 - **Discovery and maintenance:** Scan watched repositories, keep candidate sources pinned, and expose local review and maintenance queues. Candidate content is not executed.
