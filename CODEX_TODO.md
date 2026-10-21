@@ -44,9 +44,9 @@
 ### KSK-101 — Transactional installation and recovery
 
 - **Original requirements:** Workstreams 01, 07, 13; crash safety, integrity, rollback, concurrency and recovery.
-- **State:** PARTIAL. State mutations use an OS-released advisory lock with process/host metadata and explicit stale-owner recovery; old `.write-lock` directories require inspection. Core and external host changes share a lock and use staged, hash-checked file transactions, a write-ahead journal, retained core-generation backups, explicit recovery and rollback. Unmanaged files are never adopted. Local tests cover process contention, interruption recovery and preservation of unexpected user edits.
-- **Remaining:** Validate abrupt interruption at every filesystem transition and native Windows/macOS semantics; complete host doctor checks for every retained generation and external manifest edge case; improve rollback reporting and test concurrent real host clients. Multi-file replacement is recoverable after `recover-install`, but readers can observe a partially replaced generation while an interrupted transaction awaits recovery.
-- **Why not completed:** Only local Linux and deterministic process/filesystem fixtures are available; they cannot establish native host filesystem or cross-platform acceptance.
+- **State:** PARTIAL. State mutations use an OS-released advisory lock with process/host metadata and explicit stale-owner recovery; old `.write-lock` directories require inspection. Core and external host changes share a lock and use staged, hash-checked file transactions, a write-ahead journal, retained core-generation backups, explicit recovery and rollback. Unmanaged files are never adopted. Recovery preflights all journal entries and backups before writes. Windows state-lock behavior and host recovery fixtures passed in the local Python 3.13 run.
+- **Remaining:** Validate abrupt interruption at every filesystem transition and native macOS semantics; complete host doctor checks for every retained generation and external manifest edge case; improve rollback reporting and test concurrent real host clients. Multi-file replacement is recoverable after `recover-install`, but readers can observe a partially replaced generation while an interrupted transaction awaits recovery.
+- **Why not completed:** Windows unit and filesystem tests do not establish actual Codex/Claude host acceptance or native macOS behavior.
 - **Files:** `src/kstack/installer.py`, `external.py`, `state.py`, `transaction.py`, `hosts.py`, `tests/test_installer.py`, `tests/test_lifecycle_extended.py`.
 - **Implementation:** Retain the format-versioned host manifest, staging directory, commit-marker ordering, file/directory `fsync` where supported, preflight ownership, symlink/junction rejection, hash-checked backup and recovery. Continue fault injection at each write/replace boundary and preserve compatibility with old core manifests.
 - **Tests:** Local `PYTHONPATH=src python -m unittest discover -s tests -v`, simulated interruption/recovery, a separate-process state lock, rollback and user-edit conflict cases. Still add exhaustive replace-boundary injection, host-install multiprocess contention, Windows ACL/drive cases and macOS APFS paths.
@@ -66,7 +66,7 @@
 ### KSK-103 — Standards-compliant skill metadata and dependency resolver
 
 - **Original:** 01, 02, 07, 15.
-- **State:** PARTIAL. `parse_skill` recognises a conservative subset of Agent Skills frontmatter fields, quoted scalars and folded/literal descriptions. `external.inspect_package` supports reviewed multi-file local packages and the KStack `kstack-package.json` format 1 extension for sibling version constraints, dependency ordering and capability providers.
+- **State:** PARTIAL. `parse_skill` recognises a conservative subset of Agent Skills frontmatter fields, quoted scalars and folded/literal descriptions. `external.inspect_package` supports reviewed multi-file local packages and the KStack `kstack-package.json` format 1 extension for sibling version constraints, dependency ordering and capability providers. Package roots and files reject case-folded and Unicode-normalised path collisions across host filesystems.
 - **Remaining:** Complete broader YAML/spec compatibility and official conformance fixtures; preserve and report licence/compatibility details more fully; support external dependencies beyond declared local siblings and define host-specific restrictions. The KStack package manifest is not an upstream standard.
 - **Why:** Real external package diversity and complete specification variants were not available for live acceptance.
 - **Files:** `src/kstack/security.py`, `external.py`, `installer.py`, `router.py`, `data/integrations.json`.
@@ -157,7 +157,7 @@
 ### KSK-303 — Reusable end-to-end quality and native/browser adapters
 
 - **Original:** 09 and 11.
-- **State:** PARTIAL. `verification.py` executes **trusted explicit** argument-list commands with a total timeout, captures real outcomes and appends local evidence. Config v2 can define reviewed commands per workspace target and runs them from each target directory. `kstack-verify` gives review instructions.
+- **State:** PARTIAL. `verification.py` executes **trusted explicit** argument-list commands with a total timeout, captures real outcomes and appends local evidence. Config v2 can define reviewed commands per workspace target and runs them from each target directory. Verification compares pre/post Git state and fingerprints staged changes, tracked contents and non-ignored untracked files; it can verify an unchanged dirty tree and returns incomplete when the Git fingerprint changes or is unavailable. `kstack-verify` gives review instructions.
 - **Remaining:** Build framework-specific verified check profiles, Playwright/BreakSwarm adapter, GUI screenshot capture, accessibility, native Swift/WPF/Flutter/React Native acceptance, broader failure/recovery coverage and reviewer isolation. Separate fresh tests from stale evidence. The current subprocess runner is **not sandboxed**.
 - **Blocker:** Browser/native SDKs and approved real project environments absent; arbitrary untrusted test execution is prohibited.
 - **Files:** `src/kstack/verification.py`, `evidence.py`, `project.py`, `skills/kstack-verify/SKILL.md`, `docs/ACCEPTANCE.md`.
@@ -250,9 +250,9 @@
 ### KSK-601 — Real OS/host compatibility matrix
 
 - **Original:** 03, 13, 15.
-- **State:** PARTIAL. Linux/this container tests pass; skills install with Codex/Claude directory conventions. No native host acceptance or Windows/macOS tests have run in this session.
-- **Remaining:** Test latest supported macOS/Windows/Linux, Python interpreter versions, PowerShell paths, symlink/junction behaviour, file locking and read/write permissions. Add Cursor, OpenCode, Gemini/Antigravity adapters only after validating their actual skill load conventions and host versions.
-- **Blocker:** No remote/native OS sessions, Xcode/.NET/GUI tools or active coding hosts accessible.
+- **State:** PARTIAL. The complete unit suite passed on Windows with Python 3.13 after PR #5 and PR #6 changes. Codex/Claude directory conventions are covered by local file tests. No native agent-host invocation acceptance or macOS run has been performed.
+- **Remaining:** Test supported Python 3.10+ releases and native macOS; exercise symlink/junction behavior where privileges permit, PowerShell paths, permissions and live host invocation. Add Cursor, OpenCode, Gemini/Antigravity adapters only after validating their actual skill-load conventions and host versions.
+- **Blocker:** No native macOS or authenticated live coding-host session is accessible in this execution.
 - **Files:** `src/kstack/installer.py`, `external.py`, `state.py`, `project.py`, `hosts.py`, `docs/ACCEPTANCE.md`.
 - **Tests:** Cross-platform install/reinstall/uninstall; clipboard/GUI host skills where relevant; malformed paths, interrupted operations, timezones, long paths, shell quoting.
 - **Acceptance:** Each claimed host and OS combination has recorded actual installation and invocation tests; unsupported combinations are honestly labelled.
@@ -303,13 +303,13 @@
 
 - **State:** The recovery preflight and portable case/Unicode path-collision checks are merged into `main` at `034e191f9771c0b895b452a4ae31adefa142f6e3`.
 - **Additional fix found during Windows verification:** State-lock metadata is read through the descriptor holding the Windows byte-range lock. Windows' invalid-process-ID result is treated as confirmed process absence. Installer tests compare native paths and skip symlink setup when Windows denies the required privilege.
-- **Evidence:** On Windows with Python 3.13, 114 tests passed and 8 platform-dependent tests skipped; compileall, `doctor`, `schedule-status`, and `git diff --check` passed. Hosted Actions were not used.
+- **Evidence:** On Windows with Python 3.13, the PR #5 checkpoint ran 114 tests (8 platform-dependent skips). The combined PR #5/#6 suite then ran 123 tests (8 skips), all passing. Compileall, `doctor`, `schedule-status`, and `git diff --check` passed. Hosted Actions were not used.
 - **Residual acceptance:** Native macOS and other host integrations remain unverified. Recovery preflights all entries but still replaces files one at a time; filesystem races and interruption during the recovery writes can require another recovery attempt.
 
 ### KSK-303 / KSK-503 — PR #6
 
 - **State:** The verifier now compares before/after Git revision, branch, cleanliness, and a digest of the index, tracked changes, and non-ignored untracked file contents. It stores the digest rather than raw diffs. A dirty baseline can still verify when unchanged; changed or unavailable Git fingerprints produce an incomplete result.
 - **Files:** `src/kstack/verification.py`, `src/kstack/delivery.py`, `tests/test_verification_revision_stability.py`, `README.md`, `docs/ARCHITECTURE.md`, `docs/SECURITY.md`.
-- **Evidence:** Eight focused PR #6 regression tests passed locally. The combined full-suite and CLI checks are the remaining gate before merging PR #6.
+- **Evidence:** All nine PR #6 regression tests passed in the combined 123-test suite on Windows with Python 3.13. Compileall, `doctor`, `schedule-status`, and `git diff --check` passed. PR #6 is ready for merge after the final remote head check.
 - **Residual limits:** Ignored files are outside the Git fingerprint. Modified submodules and special files are treated as uninspectable; transient edits restored before the final snapshot cannot be detected. Git checks do not sandbox trusted verification commands or prove that commands exercised the intended behavior.
-- **Resume:** Fetch `main`, run `PYTHONPATH=src python -m unittest discover -s tests -v`, `python -m compileall -q src/kstack scripts tests`, `python scripts/kstack.py doctor`, and `python scripts/kstack.py schedule-status`; repair failures and update both status files before merging.
+- **Resume:** Continue with KSK-101 through KSK-104 acceptance gaps and the P1 routing/integration tasks; see their individual blockers and acceptance criteria above.

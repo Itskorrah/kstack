@@ -78,6 +78,12 @@ def verify_project(project: Path, state: Path, *, timeout: int = 120, apply: boo
         before_snapshot[field] == snapshot[field]
         for field in ("commit", "branch", "clean", "git_available")
     )
+    if (before_snapshot.get("git_available") or snapshot.get("git_available")
+            or before_snapshot.get("worktree_sha256") is not None
+            or snapshot.get("worktree_sha256") is not None):
+        before_tree = before_snapshot.get("worktree_sha256")
+        after_tree = snapshot.get("worktree_sha256")
+        revision_stable = revision_stable and before_tree is not None and before_tree == after_tree
     checks_passed = len(results) == len(plan) and all(item["status"] == "passed" for item in results)
     passed = checks_passed and revision_stable
     answer = {"git_snapshot": snapshot, "pre_verification_git_snapshot": before_snapshot,

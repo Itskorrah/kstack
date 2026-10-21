@@ -54,6 +54,54 @@ class VerificationRevisionTests(unittest.TestCase):
         self.assertTrue(answer["pre_verification_git_snapshot"]["clean"])
         self.assertFalse(answer["git_snapshot"]["clean"])
 
+    def test_preexisting_dirty_tracked_change_is_bound_by_content(self):
+        self.configure([sys.executable, "-c",
+                        "from pathlib import Path; Path('tracked.txt').write_text('changed again')"])
+        (self.project / "tracked.txt").write_text("preexisting local edit", encoding="utf-8")
+        answer = verify_project(self.project, self.state, apply=True)
+        self.assertTrue(answer["checks_passed"])
+        self.assertFalse(answer["pre_verification_git_snapshot"]["clean"])
+        self.assertFalse(answer["git_snapshot"]["clean"])
+        self.assertNotEqual(answer["pre_verification_git_snapshot"]["worktree_sha256"],
+                            answer["git_snapshot"]["worktree_sha256"])
+        self.assertFalse(answer["revision_stable"])
+        self.assertFalse(answer["ok"])
+
+    def test_preexisting_untracked_change_is_bound_by_content(self):
+        self.configure([sys.executable, "-c",
+                        "from pathlib import Path; Path('generated.txt').write_text('changed again')"])
+        (self.project / "generated.txt").write_text("preexisting generated file", encoding="utf-8")
+        answer = verify_project(self.project, self.state, apply=True)
+        self.assertTrue(answer["checks_passed"])
+        self.assertNotEqual(answer["pre_verification_git_snapshot"]["worktree_sha256"],
+                            answer["git_snapshot"]["worktree_sha256"])
+        self.assertFalse(answer["revision_stable"])
+        self.assertFalse(answer["ok"])
+
+    def test_index_state_change_is_not_hidden_by_same_dirty_content(self):
+        script = ("import subprocess; subprocess.run(['git', 'reset', '--quiet', 'HEAD', "
+                  "'--', 'tracked.txt'], check=True)")
+        self.configure([sys.executable, "-c", script])
+        (self.project / "tracked.txt").write_text("staged edit", encoding="utf-8")
+        self.git("add", "tracked.txt")
+        answer = verify_project(self.project, self.state, apply=True)
+        self.assertTrue(answer["checks_passed"])
+        self.assertFalse(answer["pre_verification_git_snapshot"]["clean"])
+        self.assertFalse(answer["git_snapshot"]["clean"])
+        self.assertNotEqual(answer["pre_verification_git_snapshot"]["worktree_sha256"],
+                            answer["git_snapshot"]["worktree_sha256"])
+        self.assertFalse(answer["revision_stable"])
+        self.assertFalse(answer["ok"])
+
+    def test_unchanged_preexisting_dirty_tree_can_still_be_verified(self):
+        self.configure([sys.executable, "-c", "print('ok')"])
+        (self.project / "tracked.txt").write_text("preexisting local edit", encoding="utf-8")
+        answer = verify_project(self.project, self.state, apply=True)
+        self.assertTrue(answer["checks_passed"])
+        self.assertFalse(answer["pre_verification_git_snapshot"]["clean"])
+        self.assertTrue(answer["revision_stable"])
+        self.assertTrue(answer["ok"])
+
     def test_commit_moving_head_after_passing_check_is_not_verified(self):
         script = ("import subprocess; from pathlib import Path; "
                   "Path('tracked.txt').write_text('new contents'); "
