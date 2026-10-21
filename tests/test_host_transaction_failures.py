@@ -150,6 +150,32 @@ class HostTransactionFailureMatrixTests(unittest.TestCase):
                         self.assertFalse(stage.exists())
                         self.assertFalse((root / ".kstack-generations" / ("d" * 32)).exists())
 
+    def test_retained_snapshot_write_failure_cleans_preflight_state(self):
+        for timing in ("before", "after"):
+            with self.subTest(timing=timing):
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory) / "host"
+                    self._initial_host(root)
+                    snapshot = root / ".kstack-generations" / ("e" * 32)
+                    stage = root / (STAGE_PREFIX + "e" * 32)
+                    original_write = transaction.write_json
+
+                    def fail_snapshot_write(path, data):
+                        if Path(path) == snapshot / "generation.json":
+                            if timing == "after":
+                                original_write(path, data)
+                            raise OSError("injected retained snapshot write failure")
+                        return original_write(path, data)
+
+                    with patch.object(transaction, "write_json", side_effect=fail_snapshot_write):
+                        with self.assertRaisesRegex(OSError, "retained snapshot"):
+                            commit_host_files(root, {"skills/a.txt": b"new-a"},
+                                              generation="e" * 32, retain_backup=True)
+                    self.assertEqual((root / "skills/a.txt").read_bytes(), b"old-a")
+                    self.assertFalse((root / HOST_JOURNAL).exists())
+                    self.assertFalse(stage.exists())
+                    self.assertFalse(snapshot.exists())
+
 
 if __name__ == "__main__":
     unittest.main()
