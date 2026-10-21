@@ -18,10 +18,12 @@ ROUTES = {
 SPECIALISTS = {
     "evolve": {"signals": ("improve", "refactor", "modernise", "audit", "entire", "comprehensive"), "profiles": (), "capabilities": ("orchestration.evolve",)},
     "ui-skills": {"signals": ("ui", "design", "visual", "layout", "accessibility", "frontend"), "profiles": ("web",), "capabilities": ("ui.design", "ui.accessibility")},
-    "pstack": {"signals": ("architecture", "architect", "security", "review", "design", "blast radius"), "profiles": (), "capabilities": ("architecture.review",)},
+    "pstack": {"signals": ("architecture", "architect", "security", "review", "design", "blast radius",
+                            "authentication", "authorization", "permissions", "secret", "secrets",
+                            "database", "migration"), "profiles": (), "capabilities": ("architecture.review",)},
     "superpowers": {"signals": ("debug", "bug", "tdd", "test"), "profiles": (), "capabilities": ("engineering.tdd", "engineering.debugging")},
     "vercel-react": {"signals": ("react", "nextjs", "performance", "frontend"), "profiles": ("web",), "capabilities": ("react.performance",)},
-    "breakswarm": {"signals": ("browser", "e2e", "end to end", "ui testing"), "profiles": ("web",), "capabilities": ("testing.browser",)},
+    "breakswarm": {"signals": ("browser", "e2e", "end to end", "ui testing"), "profiles": (), "capabilities": ("testing.browser",)},
     "sessionbridge": {"signals": ("handoff", "resume", "switch agent", "context"), "profiles": (), "capabilities": ("orchestration.handoff",)},
     "replica": {"signals": ("clone", "replicate", "competitor", "reverse engineer"), "profiles": (), "capabilities": ("research.replication",)},
     "motionforge": {"signals": ("video", "motion", "animate"), "profiles": (), "capabilities": ("creative.motion",)},
@@ -152,7 +154,11 @@ def route(task: str, root: Path, state: Path, profile: str = "general", project:
         candidate = SPECIALISTS.get(sid)
         if not candidate:
             continue
-        relevance = sum(2 for keyword in candidate["signals"] if _matches(text, keyword))
+        signal_fit = sum(2 for keyword in candidate["signals"] if _matches(text, keyword))
+        if signal_fit == 0:
+            continue
+        # A project profile may refine a task match, but must not create one.
+        relevance = signal_fit
         relevance += 1 if chosen_profile in candidate["profiles"] else 0
         if sid in project_config.get("skill_preferences", []):
             relevance += 3
