@@ -65,7 +65,7 @@ class InstallerTest(unittest.TestCase):
             installer.rollback_install("codex", "project", self.project)
     def test_project_claude_install(self):
         answer = install(ROOT, self.state, "claude", "project", self.project)
-        self.assertIn(".claude/skills", answer["destination"])
+        self.assertEqual(Path(answer["destination"]), self.project / ".claude" / "skills")
         self.assertTrue(doctor(ROOT, self.state, "claude", "project", self.project)["ok"])
     def test_dry_run_no_mutation(self):
         x = install(ROOT, self.state, "codex", "project", self.project, dry_run=True)
@@ -110,7 +110,10 @@ class InstallerTest(unittest.TestCase):
         self.assertNotIn("kstack-router/SKILL.md", json.loads(manifest_file.read_text())["files"])
     def test_symlink_parent_is_rejected(self):
         target = self.project / ".agents"
-        target.symlink_to(self.state, target_is_directory=True)
+        try:
+            target.symlink_to(self.state, target_is_directory=True)
+        except (OSError, NotImplementedError) as exc:
+            self.skipTest(f"directory symlinks are unavailable: {exc}")
         with self.assertRaisesRegex(ValueError, "Symlink"):
             install(ROOT, self.state, "codex", "project", self.project)
     def test_invalid_scope(self):

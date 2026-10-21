@@ -16,7 +16,7 @@ from pathlib import Path
 from .installer import atomic_text, skill_dir, _assert_no_symlink_ancestors
 from .security import parse_skill, SHA, NAME, is_link_or_junction, is_safe_relative_path
 from .state import read_json, write_json
-from .transaction import commit_host_files, host_lock, host_transaction_pending, recover_host_files
+from .transaction import commit_host_files, host_lock, host_transaction_pending, recover_host_files, _host_path_key
 
 MAX_FILES = 150
 MAX_BYTES = 3_000_000
@@ -81,6 +81,7 @@ def _package_entries(source: Path, requested: str, tracked: set[str]) -> tuple[l
         raise ValueError("Package manifest skills must be a nonempty bounded list")
     by_name = {}
     by_path = {}
+    portable_paths = set()
     for item in data["skills"]:
         if not isinstance(item, dict) or set(item) - {"name", "path", "version", "dependencies", "provides"}:
             raise ValueError("Invalid package skill entry")
@@ -91,8 +92,10 @@ def _package_entries(source: Path, requested: str, tracked: set[str]) -> tuple[l
             raise ValueError("Invalid or duplicate package skill name")
         if not is_safe_relative_path(relative):
             raise ValueError(f"Invalid package skill path: {relative!r}")
-        if relative in by_path:
-            raise ValueError("Multiple package skills claim the same path")
+        portable_path = _host_path_key(relative)
+        if portable_path in portable_paths:
+            raise ValueError("Multiple package skills claim colliding paths across host filesystems")
+        portable_paths.add(portable_path)
         version = _version(item["version"])
         dependencies = item.get("dependencies", [])
         provides = item.get("provides", [])
@@ -191,6 +194,7 @@ def _inspect_skill_files(source: Path, relative: str, tracked: set[str]) -> tupl
         raise ValueError(f"Expected ordinary SKILL.md in {relative}")
     name = parse_skill(skill.read_text(encoding="utf-8"))["name"]
     files, total = {}, 0
+    portable_files = set()
     for entry in sorted(directory.rglob("*")):
         if is_link_or_junction(entry):
             raise ValueError("Symbolic links are not supported in approved skill packages")
@@ -202,6 +206,10 @@ def _inspect_skill_files(source: Path, relative: str, tracked: set[str]) -> tupl
         if rel_from_checkout not in tracked:
             raise ValueError("Package includes untracked file")
         rel = entry.relative_to(directory).as_posix()
+        portable_file = _host_path_key(rel)
+        if portable_file in portable_files:
+            raise ValueError("Skill package contains colliding file paths across host filesystems")
+        portable_files.add(portable_file)
         size = entry.stat().st_size
         total += size
         if len(files) >= MAX_FILES or total > MAX_BYTES:

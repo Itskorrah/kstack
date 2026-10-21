@@ -31,3 +31,12 @@ Evidence rule: **implemented** means code is present; **local-verified** means a
 - A test suite passing on Linux does not imply Windows/macOS acceptance.
 
 See `CODEX_TODO.md` for prioritised remaining work, exact files, dependencies, blocked acceptance environments and test criteria.
+
+## 20 October 2026 — Chat-mode P0 safety checkpoint
+
+- Baseline main: b6924a1d29d07bd15325dbf666984ccb1e7c0450. Branch: fix/host-recovery-preflight-20261020.
+- **Implemented (unverified):** Host creation rejects portable case/Unicode file aliases; host recovery checks the complete journal and required backups before rolling back any file; external package inspection rejects colliding package roots and file paths.
+- **Tests added (not run):** tests/test_host_path_identity.py (9) and tests/test_external_portable_paths.py (2); scenarios cover a late user edit, corrupt backup, alias collisions, successful recovery and unsafe generation snapshots and symlinked host roots.
+- **Evidence:** GitHub connector commit/readback confirmed. Local container has Python and Git but cannot resolve github.com for clone/download. No complete source checkout or full test run; no GitHub Actions invoked. Static readback is not a passing test.
+- **Acceptance gate:** In a fresh checkout, run PYTHONPATH=src python -m unittest discover -s tests -v; python -m compileall -q src/kstack scripts tests; python scripts/kstack.py doctor; python scripts/kstack.py schedule-status. Repair failures, then separately test native Windows/macOS behaviour.
+- **Residual risk:** During an actual recovery write failure, some files may still be restored while others await another recovery attempt; there is no atomic multi-file reader visibility and no cross-platform acceptance evidence yet.

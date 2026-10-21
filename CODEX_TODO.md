@@ -296,3 +296,18 @@
 4. Merge verified work when authorised and safe. If real host credentials are absent, implement/test standalone components and move on instead of blocking the whole programme.
 
 **No future task in this file should be labelled complete until its objective acceptance criteria have genuinely been met.**
+
+## 20 October 2026 update — KSK-101 / KSK-103 pending verification
+
+**Classification:** P0 changes partially implemented; verification environment-blocked, not Codex-only. Exact blocker: the Chat-mode container cannot resolve GitHub to obtain a complete checkout; hosted Actions are exhausted. GitHub commits and file readback were available; no Python test suite has run on the new branch.
+
+**Already written:** transaction creation rejects case-insensitive/Unicode-normalised filename collisions; recovery preflights every journal entry, old/new hash, needed backup and snapshot before modifying any file; external inspection rejects portable collisions across package skill directories and tracked files. Eleven new tests cover these invariants. See IMPLEMENTATION_STATUS.md.
+
+**Branch:** fix/host-recovery-preflight-20261020, based on main b6924a1d29d07bd15325dbf666984ccb1e7c0450.
+**Files:** src/kstack/transaction.py; src/kstack/external.py; tests/test_host_path_identity.py; tests/test_external_portable_paths.py.
+
+**Resume:** From a clean or disposable worktree: git fetch origin; git switch fix/host-recovery-preflight-20261020; PYTHONPATH=src python -m unittest discover -s tests -v; python -m compileall -q src/kstack scripts tests; python scripts/kstack.py doctor; python scripts/kstack.py schedule-status.
+
+**Acceptance:** New adversarial tests and all existing tests pass with real package code, preserving later-edited files and all earlier files on a preflight failure; no overwritten unmanaged content; no host path aliases; no regressions in CLI/install/recovery/rollback. Fix failing tests and review source before merging. Native Windows/macOS semantics, broad crash boundary fault injection, live host use and real third-party package acceptance remain separately blocked or partial under KSK-101/103/104.
+
+**Evidence:** Readback of branch commits and source changes only. Do not call these runtime-verified. Do not merge this branch solely on static readback. Avoid triggering GitHub Actions for verification.
